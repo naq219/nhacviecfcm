@@ -65,31 +65,48 @@ var (
 	deleteWherePattern = regexp.MustCompile(`(?i)DELETE\s+FROM\s+.*\s+WHERE\s+`)
 )
 
+// Set CORS headers helper function
+func setCORSHeaders(re *core.RequestEvent) {
+	re.Response.Header().Set("Access-Control-Allow-Origin", "*")
+	re.Response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH")
+	re.Response.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, X-File-Name")
+	re.Response.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range")
+	re.Response.Header().Set("Access-Control-Allow-Credentials", "true")
+	re.Response.Header().Set("Access-Control-Max-Age", "86400")
+}
+
 func main() {
 	app := pocketbase.New()
 	os.Setenv("PB_ADDR", "127.0.0.1:8888")
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Handle preflight OPTIONS requests for all routes
+		se.Router.OPTIONS("/*", func(re *core.RequestEvent) error {
+			setCORSHeaders(re)
+			return re.NoContent(204)
+		})
+
 		// Hello endpoint
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
+			setCORSHeaders(re)
 			return re.String(200, "Hello world!")
 		})
 
 		// SELECT queries - GET and POST
-		se.Router.GET("/api/query", handleSelectQuery(app))
-		se.Router.POST("/query", handleSelectQuery(app))
+		se.Router.GET("/api/rquery", handleSelectQuery(app))
+		se.Router.POST("/rquery", handleSelectQuery(app))
 
 		// INSERT queries - GET and POST
-		se.Router.GET("/insert", handleInsertQuery(app))
-		se.Router.POST("/insert", handleInsertQuery(app))
+		se.Router.GET("/api/rinsert", handleInsertQuery(app))
+		se.Router.POST("/api/rinsert", handleInsertQuery(app))
 
 		// UPDATE queries - GET and PUT
-		se.Router.GET("/update", handleUpdateQuery(app))
-		se.Router.PUT("/update", handleUpdateQuery(app))
+		se.Router.GET("/api/rupdate", handleUpdateQuery(app))
+		se.Router.PUT("/api/rupdate", handleUpdateQuery(app))
 
 		// DELETE queries - GET and DELETE
-		se.Router.GET("/delete", handleDeleteQuery(app))
-		se.Router.DELETE("/delete", handleDeleteQuery(app))
+		se.Router.GET("/api/rdelete", handleDeleteQuery(app))
+		se.Router.DELETE("/api/rdelete", handleDeleteQuery(app))
 
 		return se.Next()
 	})
@@ -244,6 +261,8 @@ func (e *ValidationError) Error() string {
 // Handler functions
 func handleSelectQuery(app *pocketbase.PocketBase) func(*core.RequestEvent) error {
 	return func(re *core.RequestEvent) error {
+		setCORSHeaders(re)
+
 		req, err := parseRequest(re)
 		if err != nil {
 			return sendErrorResponse(re, 400, "Invalid request format", err)
@@ -278,6 +297,8 @@ func handleSelectQuery(app *pocketbase.PocketBase) func(*core.RequestEvent) erro
 
 func handleInsertQuery(app *pocketbase.PocketBase) func(*core.RequestEvent) error {
 	return func(re *core.RequestEvent) error {
+		setCORSHeaders(re)
+
 		req, err := parseRequest(re)
 		if err != nil {
 			return sendErrorResponse(re, 400, "Invalid request format", err)
@@ -301,6 +322,8 @@ func handleInsertQuery(app *pocketbase.PocketBase) func(*core.RequestEvent) erro
 
 func handleUpdateQuery(app *pocketbase.PocketBase) func(*core.RequestEvent) error {
 	return func(re *core.RequestEvent) error {
+		setCORSHeaders(re)
+
 		req, err := parseRequest(re)
 		if err != nil {
 			return sendErrorResponse(re, 400, "Invalid request format", err)
