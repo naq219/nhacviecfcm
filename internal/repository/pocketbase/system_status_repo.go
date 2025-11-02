@@ -59,29 +59,47 @@ func (r *PocketBaseSystemStatusRepo) IsWorkerEnabled(ctx context.Context) (bool,
 
 // EnableWorker enables the worker
 func (r *PocketBaseSystemStatusRepo) EnableWorker(ctx context.Context) error {
-	query := `UPDATE system_status SET worker_enabled = TRUE, updated = ? WHERE id = 1`
-	_, err := r.app.DB().NewQuery(query).Execute(time.Now().UTC())
+	query := `UPDATE system_status SET worker_enabled = TRUE, updated = {:updated} WHERE id = 1`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"updated": time.Now().UTC(),
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // DisableWorker disables the worker with an error message
 func (r *PocketBaseSystemStatusRepo) DisableWorker(ctx context.Context, errorMsg string) error {
-	query := `UPDATE system_status SET worker_enabled = FALSE, last_error = ?, updated = ? WHERE id = 1`
-	_, err := r.app.DB().NewQuery(query).Execute(errorMsg, time.Now().UTC())
+	query := `UPDATE system_status SET worker_enabled = FALSE, last_error = {:error_msg}, updated = {:updated} WHERE id = 1`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"error_msg": errorMsg,
+		"updated": time.Now().UTC(),
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // UpdateError updates the last error message
 func (r *PocketBaseSystemStatusRepo) UpdateError(ctx context.Context, errorMsg string) error {
-	query := `UPDATE system_status SET last_error = ?, updated = ? WHERE id = 1`
-	_, err := r.app.DB().NewQuery(query).Execute(errorMsg, time.Now().UTC())
+	query := `UPDATE system_status SET last_error = {:error_msg}, updated = {:updated} WHERE id = 1`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"error_msg": errorMsg,
+		"updated": time.Now().UTC(),
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // ClearError clears the error message
 func (r *PocketBaseSystemStatusRepo) ClearError(ctx context.Context) error {
-	query := `UPDATE system_status SET last_error = '', updated = ? WHERE id = 1`
-	_, err := r.app.DB().NewQuery(query).Execute(time.Now().UTC())
+	query := `UPDATE system_status SET last_error = '', updated = {:updated} WHERE id = 1`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"updated": time.Now().UTC(),
+	})
+	_, err := q.Execute()
 	return err
 }
 

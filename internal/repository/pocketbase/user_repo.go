@@ -46,10 +46,15 @@ func (r *PocketBaseUserRepo) Create(ctx context.Context, user *models.User) erro
 
 // GetByID retrieves a user by ID
 func (r *PocketBaseUserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
-	query := `SELECT * FROM users WHERE id = ?`
+	query := `SELECT * FROM users WHERE id = {:id}`
+
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"id": id,
+	})
 
 	var rawResult dbx.NullStringMap
-	err := r.app.DB().NewQuery(query).One(&rawResult, id)
+	err := q.One(&rawResult)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +64,15 @@ func (r *PocketBaseUserRepo) GetByID(ctx context.Context, id string) (*models.Us
 
 // GetByEmail retrieves a user by email
 func (r *PocketBaseUserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
-	query := `SELECT * FROM users WHERE email = ?`
+	query := `SELECT * FROM users WHERE email = {:email}`
+
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"email": email,
+	})
 
 	var rawResult dbx.NullStringMap
-	err := r.app.DB().NewQuery(query).One(&rawResult, email)
+	err := q.One(&rawResult)
 	if err != nil {
 		return nil, err
 	}
@@ -74,39 +84,56 @@ func (r *PocketBaseUserRepo) GetByEmail(ctx context.Context, email string) (*mod
 func (r *PocketBaseUserRepo) Update(ctx context.Context, user *models.User) error {
 	query := `
 		UPDATE users 
-		SET email = ?, fcm_token = ?, is_fcm_active = ?, updated = ?
-		WHERE id = ?
+		SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
+		WHERE id = {:id}
 	`
-
-	_, err := r.app.DB().NewQuery(query).Execute(
-		user.Email,
-		user.FCMToken,
-		user.IsFCMActive,
-		time.Now().UTC(),
-		user.ID,
-	)
-
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"email": user.Email,
+		"fcm_token": user.FCMToken,
+		"is_fcm_active": user.IsFCMActive,
+		"updated": time.Now().UTC(),
+		"id": user.ID,
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // UpdateFCMToken updates only the FCM token
 func (r *PocketBaseUserRepo) UpdateFCMToken(ctx context.Context, userID, token string) error {
-	query := `UPDATE users SET fcm_token = ?, is_fcm_active = TRUE, updated = ? WHERE id = ?`
-	_, err := r.app.DB().NewQuery(query).Execute(token, time.Now().UTC(), userID)
+	query := `UPDATE users SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"token": token,
+		"updated": time.Now().UTC(),
+		"id": userID,
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // DisableFCM disables FCM for a user (token invalid)
 func (r *PocketBaseUserRepo) DisableFCM(ctx context.Context, userID string) error {
-	query := `UPDATE users SET is_fcm_active = FALSE, fcm_token = NULL, updated = ? WHERE id = ?`
-	_, err := r.app.DB().NewQuery(query).Execute(time.Now().UTC(), userID)
+	query := `UPDATE users SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"updated": time.Now().UTC(),
+		"id": userID,
+	})
+	_, err := q.Execute()
 	return err
 }
 
 // EnableFCM re-enables FCM with a new token
 func (r *PocketBaseUserRepo) EnableFCM(ctx context.Context, userID string, token string) error {
-	query := `UPDATE users SET fcm_token = ?, is_fcm_active = TRUE, updated = ? WHERE id = ?`
-	_, err := r.app.DB().NewQuery(query).Execute(token, time.Now().UTC(), userID)
+	query := `UPDATE users SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
+	q := r.app.DB().NewQuery(query)
+	q.Bind(dbx.Params{
+		"token": token,
+		"updated": time.Now().UTC(),
+		"id": userID,
+	})
+	_, err := q.Execute()
 	return err
 }
 

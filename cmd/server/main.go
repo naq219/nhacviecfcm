@@ -27,7 +27,6 @@ func main() {
 	// Initialize repositories
 	reminderRepo := pbRepo.NewPocketBaseReminderRepo(app)
 	userRepo := pbRepo.NewPocketBaseUserRepo(app)
-	systemStatusRepo := pbRepo.NewPocketBaseSystemStatusRepo(app)
 	queryRepo := pbRepo.NewPocketBaseQueryRepo(app)
 
 	// Initialize services
