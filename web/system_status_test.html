@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test System Status</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    .card { border: 1px solid #ddd; padding: 16px; border-radius: 8px; max-width: 600px; }
+    .row { margin: 8px 0; }
+    label { display: inline-block; min-width: 140px; }
+    input[type="text"] { width: 100%; padding: 8px; }
+    button { padding: 8px 12px; margin-right: 8px; }
+    pre { background: #f6f6f6; padding: 8px; border-radius: 6px; }
+  </style>
+  <script>
+    const API_BASE = 'http://127.0.0.1:8090';
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/system_status`);
+        const data = await res.json();
+        if (!data || !data.data) throw new Error('No data');
+        const s = data.data;
+        document.getElementById('worker_enabled').textContent = s.worker_enabled ? 'true' : 'false';
+        document.getElementById('last_error').textContent = s.last_error || '';
+        document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('raw').textContent = `Fetch error: ${e?.message || e}`;
+      }
+    }
+
+    async function updateStatus(enable) {
+      try {
+        const lastErrorVal = document.getElementById('error_input').value;
+        const payload = { worker_enabled: enable };
+        if (lastErrorVal) payload.last_error = lastErrorVal;
+        const res = await fetch(`${API_BASE}/api/system_status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+        fetchStatus();
+      } catch (e) {
+        document.getElementById('raw').textContent = `Update error: ${e?.message || e}`;
+      }
+    }
+
+    async function setErrorOnly() {
+      try {
+        const lastErrorVal = document.getElementById('error_input').value;
+        const res = await fetch(`${API_BASE}/api/system_status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ last_error: lastErrorVal }),
+        });
+        const data = await res.json();
+        document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+        fetchStatus();
+      } catch (e) {
+        document.getElementById('raw').textContent = `Update error: ${e?.message || e}`;
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', fetchStatus);
+  </script>
+</head>
+<body>
+  <h1>System Status Test</h1>
+  <div class="card">
+    <div class="row"><label>worker_enabled:</label> <span id="worker_enabled">...</span></div>
+    <div class="row"><label>last_error:</label> <span id="last_error">...</span></div>
+    <div class="row">
+      <label for="error_input">Nhập last_error:</label>
+      <input id="error_input" type="text" placeholder="vd: testing error" />
+    </div>
+    <div class="row">
+      <button onclick="updateStatus(true)">Enable worker</button>
+      <button onclick="updateStatus(false)">Disable worker</button>
+      <button onclick="setErrorOnly()">Set only last_error</button>
+      <button onclick="fetchStatus()">Refresh</button>
+    </div>
+    <h3>Raw response</h3>
+    <pre id="raw"></pre>
+  </div>
+</body>
+</html>

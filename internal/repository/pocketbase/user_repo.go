@@ -27,10 +27,10 @@ func NewPocketBaseUserRepo(app *pocketbase.PocketBase) repository.UserRepository
 
 // Create inserts a new user
 func (r *PocketBaseUserRepo) Create(ctx context.Context, user *models.User) error {
-	query := `
-		INSERT INTO users (id, email, fcm_token, is_fcm_active, created, updated)
-		VALUES ({:id}, {:email}, {:fcm_token}, {:is_fcm_active}, {:created}, {:updated})
-	`
+    query := `
+        INSERT INTO musers (id, email, fcm_token, is_fcm_active, created, updated)
+        VALUES ({:id}, {:email}, {:fcm_token}, {:is_fcm_active}, {:created}, {:updated})
+    `
 
 	_, err := r.app.DB().NewQuery(query).Bind(dbx.Params{
 		"id":            user.ID,
@@ -46,7 +46,7 @@ func (r *PocketBaseUserRepo) Create(ctx context.Context, user *models.User) erro
 
 // GetByID retrieves a user by ID
 func (r *PocketBaseUserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
-	query := `SELECT * FROM users WHERE id = {:id}`
+    query := `SELECT * FROM musers WHERE id = {:id}`
 
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
@@ -64,7 +64,7 @@ func (r *PocketBaseUserRepo) GetByID(ctx context.Context, id string) (*models.Us
 
 // GetByEmail retrieves a user by email
 func (r *PocketBaseUserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
-	query := `SELECT * FROM users WHERE email = {:email}`
+    query := `SELECT * FROM musers WHERE email = {:email}`
 
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
@@ -82,11 +82,11 @@ func (r *PocketBaseUserRepo) GetByEmail(ctx context.Context, email string) (*mod
 
 // Update updates user information
 func (r *PocketBaseUserRepo) Update(ctx context.Context, user *models.User) error {
-	query := `
-		UPDATE users 
-		SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
-		WHERE id = {:id}
-	`
+    query := `
+        UPDATE musers 
+        SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
+        WHERE id = {:id}
+    `
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"email": user.Email,
@@ -101,7 +101,7 @@ func (r *PocketBaseUserRepo) Update(ctx context.Context, user *models.User) erro
 
 // UpdateFCMToken updates only the FCM token
 func (r *PocketBaseUserRepo) UpdateFCMToken(ctx context.Context, userID, token string) error {
-	query := `UPDATE users SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
+    query := `UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"token": token,
@@ -114,7 +114,7 @@ func (r *PocketBaseUserRepo) UpdateFCMToken(ctx context.Context, userID, token s
 
 // DisableFCM disables FCM for a user (token invalid)
 func (r *PocketBaseUserRepo) DisableFCM(ctx context.Context, userID string) error {
-	query := `UPDATE users SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}`
+    query := `UPDATE musers SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"updated": time.Now().UTC(),
@@ -126,7 +126,7 @@ func (r *PocketBaseUserRepo) DisableFCM(ctx context.Context, userID string) erro
 
 // EnableFCM re-enables FCM with a new token
 func (r *PocketBaseUserRepo) EnableFCM(ctx context.Context, userID string, token string) error {
-	query := `UPDATE users SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
+    query := `UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"token": token,
@@ -139,12 +139,12 @@ func (r *PocketBaseUserRepo) EnableFCM(ctx context.Context, userID string, token
 
 // GetActiveUsers retrieves all users with active FCM
 func (r *PocketBaseUserRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error) {
-	query := `
-		SELECT * FROM users 
-		WHERE is_fcm_active = TRUE 
-		  AND fcm_token IS NOT NULL 
-		  AND fcm_token != ''
-	`
+    query := `
+        SELECT * FROM musers 
+        WHERE is_fcm_active = TRUE 
+          AND fcm_token IS NOT NULL 
+          AND fcm_token != ''
+    `
 
 	var rawResults []dbx.NullStringMap
 	err := r.app.DB().NewQuery(query).All(&rawResults)

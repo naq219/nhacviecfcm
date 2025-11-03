@@ -48,10 +48,10 @@ type User struct {
 
 // SystemStatus represents system configuration (singleton)
 type SystemStatus struct {
-	ID            int       `json:"id" db:"id"` // Always 1
-	WorkerEnabled bool      `json:"worker_enabled" db:"worker_enabled"`
-	LastError     string    `json:"last_error" db:"last_error"`
-	Updated       time.Time `json:"updated" db:"updated"`
+    ID            int       `json:"mid" db:"mid"` // Always 1
+    WorkerEnabled bool      `json:"worker_enabled" db:"worker_enabled"`
+    LastError     string    `json:"last_error" db:"last_error"`
+    Updated       time.Time `json:"updated" db:"updated"`
 }
 
 // Constants for reminder types

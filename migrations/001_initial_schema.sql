@@ -1,7 +1,7 @@
 -- remiaq Initial Database Schema
 
 -- Table: users
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS musers (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     fcm_token TEXT,
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_fcm_active ON users(is_fcm_active);
+CREATE INDEX IF NOT EXISTS idx_musers_email ON musers(email);
+CREATE INDEX IF NOT EXISTS idx_musers_fcm_active ON musers(is_fcm_active);
 
 -- Table: reminders
 CREATE TABLE IF NOT EXISTS reminders (
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS reminders (
     last_sent_at DATETIME,
     created DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES musers(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_reminders_next_trigger ON reminders(next_trigger_at);
@@ -45,17 +45,17 @@ CREATE INDEX IF NOT EXISTS idx_reminders_status_trigger ON reminders(status, nex
 
 -- Table: system_status (singleton table)
 CREATE TABLE IF NOT EXISTS system_status (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    mid INTEGER PRIMARY KEY CHECK (mid = 1),
     worker_enabled BOOLEAN DEFAULT TRUE,
     last_error TEXT,
     updated DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Insert default system status
-INSERT OR IGNORE INTO system_status (id, worker_enabled) VALUES (1, TRUE);
+INSERT OR IGNORE INTO system_status (mid, worker_enabled) VALUES (1, TRUE);
 
 -- Sample data for testing (optional)
--- INSERT INTO users (id, email, fcm_token, is_fcm_active) 
+-- INSERT INTO musers (id, email, fcm_token, is_fcm_active) 
 -- VALUES ('user1', 'test@example.com', 'sample_fcm_token', TRUE);
 
 -- INSERT INTO reminders (

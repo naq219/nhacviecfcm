@@ -3,6 +3,7 @@ package pocketbase
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"remiaq/internal/models"
@@ -27,20 +28,20 @@ func NewPocketBaseSystemStatusRepo(app *pocketbase.PocketBase) repository.System
 
 // Get retrieves the system status (singleton, id=1)
 func (r *PocketBaseSystemStatusRepo) Get(ctx context.Context) (*models.SystemStatus, error) {
-	query := `SELECT * FROM system_status WHERE id = 1`
+	query := `SELECT * FROM system_status WHERE mid = 1`
 
 	var rawResult dbx.NullStringMap
 	err := r.app.DB().NewQuery(query).One(&rawResult)
+	log.Printf("rawResult: %v", rawResult)
 	if err != nil {
 		return nil, err
 	}
-
 	return r.mapToSystemStatus(rawResult)
 }
 
 // IsWorkerEnabled checks if worker is enabled
 func (r *PocketBaseSystemStatusRepo) IsWorkerEnabled(ctx context.Context) (bool, error) {
-	query := `SELECT worker_enabled FROM system_status WHERE id = 1`
+	query := `SELECT worker_enabled FROM system_status WHERE mid = 1`
 
 	var rawResult dbx.NullStringMap
 	err := r.app.DB().NewQuery(query).One(&rawResult)
@@ -59,7 +60,7 @@ func (r *PocketBaseSystemStatusRepo) IsWorkerEnabled(ctx context.Context) (bool,
 
 // EnableWorker enables the worker
 func (r *PocketBaseSystemStatusRepo) EnableWorker(ctx context.Context) error {
-	query := `UPDATE system_status SET worker_enabled = TRUE, updated = {:updated} WHERE id = 1`
+	query := `UPDATE system_status SET worker_enabled = TRUE, updated = {:updated} WHERE mid = 1`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"updated": time.Now().UTC(),
@@ -70,11 +71,11 @@ func (r *PocketBaseSystemStatusRepo) EnableWorker(ctx context.Context) error {
 
 // DisableWorker disables the worker with an error message
 func (r *PocketBaseSystemStatusRepo) DisableWorker(ctx context.Context, errorMsg string) error {
-	query := `UPDATE system_status SET worker_enabled = FALSE, last_error = {:error_msg}, updated = {:updated} WHERE id = 1`
+	query := `UPDATE system_status SET worker_enabled = FALSE, last_error = {:error_msg}, updated = {:updated} WHERE mid = 1`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"error_msg": errorMsg,
-		"updated": time.Now().UTC(),
+		"updated":   time.Now().UTC(),
 	})
 	_, err := q.Execute()
 	return err
@@ -82,11 +83,11 @@ func (r *PocketBaseSystemStatusRepo) DisableWorker(ctx context.Context, errorMsg
 
 // UpdateError updates the last error message
 func (r *PocketBaseSystemStatusRepo) UpdateError(ctx context.Context, errorMsg string) error {
-	query := `UPDATE system_status SET last_error = {:error_msg}, updated = {:updated} WHERE id = 1`
+	query := `UPDATE system_status SET last_error = {:error_msg}, updated = {:updated} WHERE mid = 1`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"error_msg": errorMsg,
-		"updated": time.Now().UTC(),
+		"updated":   time.Now().UTC(),
 	})
 	_, err := q.Execute()
 	return err
@@ -94,7 +95,7 @@ func (r *PocketBaseSystemStatusRepo) UpdateError(ctx context.Context, errorMsg s
 
 // ClearError clears the error message
 func (r *PocketBaseSystemStatusRepo) ClearError(ctx context.Context) error {
-	query := `UPDATE system_status SET last_error = '', updated = {:updated} WHERE id = 1`
+	query := `UPDATE system_status SET last_error = '', updated = {:updated} WHERE mid = 1`
 	q := r.app.DB().NewQuery(query)
 	q.Bind(dbx.Params{
 		"updated": time.Now().UTC(),
@@ -108,10 +109,10 @@ func (r *PocketBaseSystemStatusRepo) ClearError(ctx context.Context) error {
 func (r *PocketBaseSystemStatusRepo) mapToSystemStatus(raw dbx.NullStringMap) (*models.SystemStatus, error) {
 	status := &models.SystemStatus{}
 
-	// Parse ID
-	if raw["id"].Valid {
+	// Parse MID
+	if raw["mid"].Valid {
 		var id int
-		json.Unmarshal([]byte(raw["id"].String), &id)
+		json.Unmarshal([]byte(raw["mid"].String), &id)
 		status.ID = id
 	}
 

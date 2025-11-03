@@ -48,7 +48,7 @@ Xây dựng ứng dụng nhắc nhở cho phép:
 
 ## 3. Mô hình dữ liệu
 
-### 3.1. `users` (mở rộng)
+### 3.1. `musers` (mở rộng)
 
 | Trường | Kiểu | Mô tả |
 |-------|------|------|
@@ -78,7 +78,7 @@ Xây dựng ứng dụng nhắc nhở cho phép:
 
 ---
 
-### 3.3. `system_status` (1 bản ghi, `id = "main"`)
+### 3.3. `system_status` (1 bản ghi, `mid = 1`)
 
 | Trường | Kiểu | Mô tả |
 |-------|------|------|
@@ -111,7 +111,7 @@ Xây dựng ứng dụng nhắc nhở cho phép:
 ## 5. Luồng xử lý chính
 
 ### 5.1. Worker (mỗi phút)
-1. GET `/system_status/main` → nếu `worker_enabled == false` → **dừng**.
+1. GET `/system_status/1` → nếu `worker_enabled == false` → **dừng**.
 2. GET `/reminders?filter=status='active'&&next_trigger_at<=now&&(snooze_until IS NULL OR snooze_until<=now)`
 3. Với mỗi reminder:
    - GET user → nếu `is_fcm_active == false` → bỏ qua.
@@ -146,6 +146,23 @@ Xây dựng ứng dụng nhắc nhở cho phép:
 - **Client chuyển đổi múi giờ khi hiển thị**.
 - **Không dùng SQLite trực tiếp** — worker chỉ gọi API.
 - **PocketBase cần index** trên `(status, next_trigger_at)`.
+
+---
+
+## 8. API System Status
+
+- GET `/api/system_status`
+  - Trả về bản ghi singleton (`mid = 1`): `{ mid, worker_enabled, last_error, updated }`
+
+- PUT `/api/system_status`
+  - Body cho phép cập nhật:
+    - `worker_enabled: boolean` (bật/tắt worker)
+    - `last_error: string` (ghi chú lỗi hệ thống)
+  - Hành vi:
+    - Nếu `worker_enabled = true`: bật worker; nếu không có `last_error` → xóa lỗi; nếu có → cập nhật lỗi.
+    - Nếu `worker_enabled = false`: tắt worker; nếu không có `last_error` → dùng mặc định "manually disabled"; nếu có → ghi lại.
+    - Nếu chỉ có `last_error` (không thay đổi `worker_enabled`): cập nhật lỗi.
+  - Response: `{ success, message, data: SystemStatus }`
 
 ---
 
