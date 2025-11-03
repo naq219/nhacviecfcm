@@ -1,20 +1,20 @@
 package main
 
 import (
-    "context"
-    "log"
-    "os"
-    "time"
+	"context"
+	"log"
+	"os"
+	"time"
 
-    "github.com/pocketbase/pocketbase"
-    "github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 
-    "remiaq/config"
-    "remiaq/internal/handlers" // ← Đã sửa từ api/handlers
-    "remiaq/internal/middleware"
-    pbRepo "remiaq/internal/repository/pocketbase"
-    "remiaq/internal/services"
-    "remiaq/internal/worker"
+	"remiaq/config"
+	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
+	"remiaq/internal/middleware"
+	pbRepo "remiaq/internal/repository/pocketbase"
+	"remiaq/internal/services"
+	"remiaq/internal/worker"
 )
 
 func main() {
@@ -49,17 +49,17 @@ func main() {
 	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
 	reminderService := services.NewReminderService(reminderRepo, userRepo, fcmService, schedCalculator)
 
-    // Initialize handlers
-    reminderHandler := handlers.NewReminderHandler(reminderService)
-    queryHandler := handlers.NewQueryHandler(queryRepo)
+	// Initialize handlers
+	reminderHandler := handlers.NewReminderHandler(reminderService)
+	queryHandler := handlers.NewQueryHandler(queryRepo)
 
-    // Initialize system status repo and start background worker
-    sysRepo := pbRepo.NewPocketBaseSystemStatusRepo(app)
-    sysHandler := handlers.NewSystemStatusHandler(sysRepo)
-    bgCtx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    w := worker.NewWorker(sysRepo, reminderService, time.Duration(cfg.WorkerInterval)*time.Second)
-    w.Start(bgCtx)
+	// Initialize system status repo and start background worker
+	sysRepo := pbRepo.NewSystemStatusRepo(app)
+	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := worker.NewWorker(sysRepo, reminderService, time.Duration(cfg.WorkerInterval)*time.Second)
+	w.Start(bgCtx)
 
 	// Setup routes
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
@@ -88,34 +88,34 @@ func main() {
 		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
 		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
 
-        // Reminder CRUD endpoints
-        se.Router.POST("/api/reminders", reminderHandler.CreateReminder)
-        se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
-        se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
-        se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
+		// Reminder CRUD endpoints
+		se.Router.POST("/api/reminders", reminderHandler.CreateReminder)
+		se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
+		se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
+		se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
 
 		// User reminders
 		se.Router.GET("/api/users/{userId}/reminders", reminderHandler.GetUserReminders)
 
-        // Reminder actions
-        se.Router.POST("/api/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-        se.Router.POST("/api/reminders/{id}/complete", reminderHandler.CompleteReminder)
+		// Reminder actions
+		se.Router.POST("/api/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		se.Router.POST("/api/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
-        // System status API
-        se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
-        se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
+		// System status API
+		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
+		se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
 
-        // Simple HTML test page
-        se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
-            middleware.SetCORSHeaders(re)
-            // Đọc file HTML tĩnh
-            content, err := os.ReadFile("web/system_status_test.html")
-            if err != nil {
-                return re.String(404, "Test page not found")
-            }
-            re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
-            return re.String(200, string(content))
-        })
+		// Simple HTML test page
+		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Đọc file HTML tĩnh
+			content, err := os.ReadFile("web/system_status_test.html")
+			if err != nil {
+				return re.String(404, "Test page not found")
+			}
+			re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return re.String(200, string(content))
+		})
 
 		return se.Next()
 	})
