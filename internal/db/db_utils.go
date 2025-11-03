@@ -9,6 +9,16 @@ import (
 	"github.com/pocketbase/pocketbase"
 )
 
+// DBHelperInterface defines the interface for database operations
+// This allows for easy mocking in tests
+type DBHelperInterface interface {
+	GetOneRow(query string, params dbx.Params) (dbx.NullStringMap, error)
+	GetAllRows(query string, params dbx.Params) ([]dbx.NullStringMap, error)
+	Exec(query string, params dbx.Params) error
+	Count(query string, params dbx.Params) (int, error)
+	Exists(query string, params dbx.Params) (bool, error)
+}
+
 type DBHelper struct {
 	App *pocketbase.PocketBase
 }
@@ -33,8 +43,9 @@ func (h *DBHelper) GetOneRow(query string, params dbx.Params) (dbx.NullStringMap
 
 // GetOne is a generic function that runs a query and returns a single row mapped to struct T.
 // Go doesn't support generic methods, so this is implemented as a function.
+// Accepts both *DBHelper and DBHelperInterface for flexibility.
 // Usage: user, err := db.GetOne[User](helper, "SELECT * FROM users WHERE id = {:id}", dbx.Params{"id": 1})
-func GetOne[T any](h *DBHelper, query string, params dbx.Params) (*T, error) {
+func GetOne[T any](h DBHelperInterface, query string, params dbx.Params) (*T, error) {
 	raw, err := h.GetOneRow(query, params)
 	if err != nil {
 		return nil, err
@@ -45,7 +56,7 @@ func GetOne[T any](h *DBHelper, query string, params dbx.Params) (*T, error) {
 // GetOneWithConfig is a generic function that runs a query and returns a single row mapped to struct T with config.
 // Supports custom mappers and required field validation.
 // Usage: user, err := db.GetOneWithConfig[User](helper, query, params, &db.MapperConfig{RequiredFields: []string{"ID"}})
-func GetOneWithConfig[T any](h *DBHelper, query string, params dbx.Params, cfg *MapperConfig) (*T, error) {
+func GetOneWithConfig[T any](h DBHelperInterface, query string, params dbx.Params, cfg *MapperConfig) (*T, error) {
 	raw, err := h.GetOneRow(query, params)
 	if err != nil {
 		return nil, err
@@ -68,7 +79,7 @@ func (h *DBHelper) GetAllRows(query string, params dbx.Params) ([]dbx.NullString
 
 // GetAll is a generic function that runs a query and returns all rows mapped to slice of struct T.
 // Usage: users, err := db.GetAll[User](helper, "SELECT * FROM users", dbx.Params{})
-func GetAll[T any](h *DBHelper, query string, params dbx.Params) ([]T, error) {
+func GetAll[T any](h DBHelperInterface, query string, params dbx.Params) ([]T, error) {
 	rows, err := h.GetAllRows(query, params)
 	if err != nil {
 		return nil, err
@@ -88,7 +99,7 @@ func GetAll[T any](h *DBHelper, query string, params dbx.Params) ([]T, error) {
 
 // GetAllWithConfig is a generic function that runs a query and returns all rows mapped to slice of struct T with config.
 // Usage: users, err := db.GetAllWithConfig[User](helper, query, params, &db.MapperConfig{RequiredFields: []string{"ID"}})
-func GetAllWithConfig[T any](h *DBHelper, query string, params dbx.Params, cfg *MapperConfig) ([]T, error) {
+func GetAllWithConfig[T any](h DBHelperInterface, query string, params dbx.Params, cfg *MapperConfig) ([]T, error) {
 	rows, err := h.GetAllRows(query, params)
 	if err != nil {
 		return nil, err

@@ -12,9 +12,9 @@ import (
 	"github.com/pocketbase/pocketbase"
 )
 
-// SystemStatusRepo implements repository.SystemStatusRepository using DBHelper
+// SystemStatusRepo implements repository.SystemStatusRepository
 type SystemStatusRepo struct {
-	helper *db.DBHelper
+	helper db.DBHelperInterface // Use interface from db package
 }
 
 // Ensure implementation
