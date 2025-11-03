@@ -2,7 +2,6 @@ package pocketbase
 
 import (
 	"context"
-	"time"
 
 	"remiaq/internal/db"
 	"remiaq/internal/models"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // SystemStatusRepo implements repository.SystemStatusRepository
@@ -47,7 +47,7 @@ func (r *SystemStatusRepo) IsWorkerEnabled(ctx context.Context) (bool, error) {
 func (r *SystemStatusRepo) EnableWorker(ctx context.Context) error {
 	return r.helper.Exec(
 		"UPDATE system_status SET worker_enabled = TRUE, updated = {:updated} WHERE mid = 1",
-		dbx.Params{"updated": time.Now().UTC()},
+		dbx.Params{"updated": types.NowDateTime()},
 	)
 }
 
@@ -57,7 +57,7 @@ func (r *SystemStatusRepo) DisableWorker(ctx context.Context, errorMsg string) e
 		"UPDATE system_status SET worker_enabled = FALSE, last_error = {:error_msg}, updated = {:updated} WHERE mid = 1",
 		dbx.Params{
 			"error_msg": errorMsg,
-			"updated":   time.Now().UTC(),
+			"updated":   types.NowDateTime(),
 		},
 	)
 }
@@ -68,7 +68,7 @@ func (r *SystemStatusRepo) UpdateError(ctx context.Context, errorMsg string) err
 		"UPDATE system_status SET last_error = {:error_msg}, updated = {:updated} WHERE mid = 1",
 		dbx.Params{
 			"error_msg": errorMsg,
-			"updated":   time.Now().UTC(),
+			"updated":   types.NowDateTime(),
 		},
 	)
 }
@@ -77,6 +77,6 @@ func (r *SystemStatusRepo) UpdateError(ctx context.Context, errorMsg string) err
 func (r *SystemStatusRepo) ClearError(ctx context.Context) error {
 	return r.helper.Exec(
 		"UPDATE system_status SET last_error = '', updated = {:updated} WHERE mid = 1",
-		dbx.Params{"updated": time.Now().UTC()},
+		dbx.Params{"updated": types.NowDateTime()},
 	)
 }

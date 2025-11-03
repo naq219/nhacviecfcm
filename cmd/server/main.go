@@ -4,20 +4,20 @@ import (
 	"context"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 
 	"remiaq/config"
 	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
 	"remiaq/internal/middleware"
-	_ "remiaq/migrations" // Import migrations package
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
 	"remiaq/internal/worker"
+	
+	// Import migrations package để PocketBase load migrations
+	_ "remiaq/migrations"
 )
 
 func main() {
@@ -32,16 +32,6 @@ func main() {
 
 	// Create PocketBase instance
 	app := pocketbase.New()
-
-	// loosely check if it was executed using "go run"
-	isGoRun := strings.HasPrefix(os.Args[0], os.TempDir())
-
-	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
-		// enable auto creation of migration files when making collection changes in the Dashboard
-		// (the isGoRun check is to enable it only during development)
-		Automigrate: isGoRun,
-		Dir:         "migrations", // Specify the directory where your SQL migrations are located
-	})
 
 	// Initialize repositories
 	reminderRepo := pbRepo.NewReminderRepo(app)

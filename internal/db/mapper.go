@@ -159,13 +159,15 @@ func mapFieldValue(fieldVal reflect.Value, fieldType reflect.Type, value string,
 }
 
 // parseTime attempts to parse a time string using multiple common formats.
-// Supports: RFC3339Nano, RFC3339, ISO format, SQL datetime, and Go time.String() format.
+// Supports: RFC3339Nano, RFC3339, ISO format, SQL datetime, PocketBase DateTime, and Go time.String() format.
 // Returns error if none of the formats match.
 func parseTime(value string) (time.Time, error) {
 	formats := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05.999Z",    // PocketBase DateTime format with milliseconds
+		"2006-01-02 15:04:05.000Z",    // PocketBase DateTime format
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04:05.9999999 -0700 MST", // Go time.String() format (PocketBase default)
 	}
