@@ -1,3 +1,15 @@
+package migrations
+
+import (
+	"github.com/pocketbase/pocketbase/core"
+	m "github.com/pocketbase/pocketbase/migrations"
+)
+
+func init() {
+	m.Register(func(app core.App) error {
+		// up queries
+		queries := []string{
+			`
 -- remiaq Initial Database Schema
 
 -- Table: users
@@ -53,15 +65,18 @@ CREATE TABLE IF NOT EXISTS system_status (
 
 -- Insert default system status
 INSERT OR IGNORE INTO system_status (mid, worker_enabled) VALUES (1, TRUE);
+			`,
+		}
 
--- Sample data for testing (optional)
--- INSERT INTO musers (id, email, fcm_token, is_fcm_active) 
--- VALUES ('user1', 'test@example.com', 'sample_fcm_token', TRUE);
+		for _, query := range queries {
+			if _, err := app.DB().NewQuery(query).Execute(); err != nil {
+				return err
+			}
+		}
 
--- INSERT INTO reminders (
---     id, user_id, title, description, type, calendar_type,
---     next_trigger_at, trigger_time_of_day, status
--- ) VALUES (
---     'reminder1', 'user1', 'Test Reminder', 'This is a test reminder',
---     'one_time', 'solar', datetime('now', '+1 hour'), '14:00', 'active'
--- );
+		return nil
+	}, func(app core.App) error {
+		// down queries (optional)
+		return nil
+	})
+}
