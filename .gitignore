@@ -40,3 +40,5 @@ firebase-credentials.json
 Thumbs.db
 EOF
 pb_data/auxiliary.db
+pb_data/auxiliary.db
+pb_data/data.db
