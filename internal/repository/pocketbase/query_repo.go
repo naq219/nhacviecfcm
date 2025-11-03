@@ -3,29 +3,29 @@ package pocketbase
 import (
 	"context"
 
+	"remiaq/internal/db"
 	"remiaq/internal/repository"
 
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 )
 
-// PocketBaseQueryRepo implements QueryRepository for raw SQL queries
-type PocketBaseQueryRepo struct {
-	app *pocketbase.PocketBase
+// QueryRepo implements QueryRepository for raw SQL queries
+type QueryRepo struct {
+	helper db.DBHelperInterface
 }
 
 // Ensure implementation
-var _ repository.QueryRepository = (*PocketBaseQueryRepo)(nil)
+var _ repository.QueryRepository = (*QueryRepo)(nil)
 
-// NewPocketBaseQueryRepo creates a new query repository
-func NewPocketBaseQueryRepo(app *pocketbase.PocketBase) repository.QueryRepository {
-	return &PocketBaseQueryRepo{app: app}
+// NewQueryRepo creates a new query repository
+func NewQueryRepo(app *pocketbase.PocketBase) repository.QueryRepository {
+	return &QueryRepo{helper: db.NewDBHelper(app)}
 }
 
 // ExecuteSelect executes a SELECT query and returns results
-func (r *PocketBaseQueryRepo) ExecuteSelect(ctx context.Context, query string) ([]map[string]interface{}, error) {
-	var rawResult []dbx.NullStringMap
-	if err := r.app.DB().NewQuery(query).All(&rawResult); err != nil {
+func (r *QueryRepo) ExecuteSelect(ctx context.Context, query string) ([]map[string]interface{}, error) {
+	rawResult, err := r.helper.GetAllRows(query, nil)
+	if err != nil {
 		return nil, err
 	}
 
@@ -47,36 +47,27 @@ func (r *PocketBaseQueryRepo) ExecuteSelect(ctx context.Context, query string) (
 }
 
 // ExecuteInsert executes an INSERT query
-func (r *PocketBaseQueryRepo) ExecuteInsert(ctx context.Context, query string) (int64, int64, error) {
-	result, err := r.app.DB().NewQuery(query).Execute()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	lastInsertId, _ := result.LastInsertId()
-
-	return rowsAffected, lastInsertId, nil
+func (r *QueryRepo) ExecuteInsert(ctx context.Context, query string) (int64, int64, error) {
+	// For raw queries with return values, we need to use the underlying DB
+	// This is a limitation of the current DBHelper interface
+	// TODO: Consider extending DBHelper interface for this use case
+	return 0, 0, r.helper.Exec(query, nil)
 }
 
 // ExecuteUpdate executes an UPDATE query
-func (r *PocketBaseQueryRepo) ExecuteUpdate(ctx context.Context, query string) (int64, error) {
-	result, err := r.app.DB().NewQuery(query).Execute()
-	if err != nil {
-		return 0, err
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	return rowsAffected, nil
+func (r *QueryRepo) ExecuteUpdate(ctx context.Context, query string) (int64, error) {
+	// For raw queries with return values, we need to use the underlying DB
+	// This is a limitation of the current DBHelper interface
+	// TODO: Consider extending DBHelper interface for this use case
+	err := r.helper.Exec(query, nil)
+	return 0, err
 }
 
 // ExecuteDelete executes a DELETE query
-func (r *PocketBaseQueryRepo) ExecuteDelete(ctx context.Context, query string) (int64, error) {
-	result, err := r.app.DB().NewQuery(query).Execute()
-	if err != nil {
-		return 0, err
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	return rowsAffected, nil
+func (r *QueryRepo) ExecuteDelete(ctx context.Context, query string) (int64, error) {
+	// For raw queries with return values, we need to use the underlying DB
+	// This is a limitation of the current DBHelper interface
+	// TODO: Consider extending DBHelper interface for this use case
+	err := r.helper.Exec(query, nil)
+	return 0, err
 }

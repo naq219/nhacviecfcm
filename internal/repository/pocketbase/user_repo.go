@@ -2,9 +2,9 @@ package pocketbase
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"remiaq/internal/db"
 	"remiaq/internal/models"
 	"remiaq/internal/repository"
 
@@ -12,188 +12,122 @@ import (
 	"github.com/pocketbase/pocketbase"
 )
 
-// PocketBaseUserRepo implements UserRepository for PocketBase
-type PocketBaseUserRepo struct {
-	app *pocketbase.PocketBase
+// UserRepo implements repository.UserRepository
+type UserRepo struct {
+	helper db.DBHelperInterface // Use interface from db package
 }
 
 // Ensure implementation
-var _ repository.UserRepository = (*PocketBaseUserRepo)(nil)
+var _ repository.UserRepository = (*UserRepo)(nil)
 
-// NewPocketBaseUserRepo creates a new user repository
-func NewPocketBaseUserRepo(app *pocketbase.PocketBase) repository.UserRepository {
-	return &PocketBaseUserRepo{app: app}
+// NewUserRepo creates a new user repository
+func NewUserRepo(app *pocketbase.PocketBase) repository.UserRepository {
+	return &UserRepo{helper: db.NewDBHelper(app)}
 }
 
 // Create inserts a new user
-func (r *PocketBaseUserRepo) Create(ctx context.Context, user *models.User) error {
-    query := `
-        INSERT INTO musers (id, email, fcm_token, is_fcm_active, created, updated)
-        VALUES ({:id}, {:email}, {:fcm_token}, {:is_fcm_active}, {:created}, {:updated})
-    `
-
-	_, err := r.app.DB().NewQuery(query).Bind(dbx.Params{
-		"id":            user.ID,
-		"email":         user.Email,
-		"fcm_token":     user.FCMToken,
-		"is_fcm_active": user.IsFCMActive,
-		"created":       time.Now().UTC(),
-		"updated":       time.Now().UTC(),
-	}).Execute()
-
-	return err
+func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
+	return r.helper.Exec(
+		`INSERT INTO musers (id, email, fcm_token, is_fcm_active, created, updated)
+		 VALUES ({:id}, {:email}, {:fcm_token}, {:is_fcm_active}, {:created}, {:updated})`,
+		dbx.Params{
+			"id":            user.ID,
+			"email":         user.Email,
+			"fcm_token":     user.FCMToken,
+			"is_fcm_active": user.IsFCMActive,
+			"created":       time.Now().UTC(),
+			"updated":       time.Now().UTC(),
+		},
+	)
 }
 
 // GetByID retrieves a user by ID
-func (r *PocketBaseUserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
-    query := `SELECT * FROM musers WHERE id = {:id}`
-
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"id": id,
-	})
-
-	var rawResult dbx.NullStringMap
-	err := q.One(&rawResult)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.mapToUser(rawResult)
+func (r *UserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
+	return db.GetOne[models.User](
+		r.helper,
+		"SELECT * FROM musers WHERE id = {:id}",
+		dbx.Params{"id": id},
+	)
 }
 
 // GetByEmail retrieves a user by email
-func (r *PocketBaseUserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
-    query := `SELECT * FROM musers WHERE email = {:email}`
-
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"email": email,
-	})
-
-	var rawResult dbx.NullStringMap
-	err := q.One(&rawResult)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.mapToUser(rawResult)
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	return db.GetOne[models.User](
+		r.helper,
+		"SELECT * FROM musers WHERE email = {:email}",
+		dbx.Params{"email": email},
+	)
 }
 
 // Update updates user information
-func (r *PocketBaseUserRepo) Update(ctx context.Context, user *models.User) error {
-    query := `
-        UPDATE musers 
-        SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
-        WHERE id = {:id}
-    `
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"email": user.Email,
-		"fcm_token": user.FCMToken,
-		"is_fcm_active": user.IsFCMActive,
-		"updated": time.Now().UTC(),
-		"id": user.ID,
-	})
-	_, err := q.Execute()
-	return err
+func (r *UserRepo) Update(ctx context.Context, user *models.User) error {
+	return r.helper.Exec(
+		`UPDATE musers 
+		 SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
+		 WHERE id = {:id}`,
+		dbx.Params{
+			"email":         user.Email,
+			"fcm_token":     user.FCMToken,
+			"is_fcm_active": user.IsFCMActive,
+			"updated":       time.Now().UTC(),
+			"id":            user.ID,
+		},
+	)
 }
 
 // UpdateFCMToken updates only the FCM token
-func (r *PocketBaseUserRepo) UpdateFCMToken(ctx context.Context, userID, token string) error {
-    query := `UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"token": token,
-		"updated": time.Now().UTC(),
-		"id": userID,
-	})
-	_, err := q.Execute()
-	return err
+func (r *UserRepo) UpdateFCMToken(ctx context.Context, userID, token string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"token":   token,
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
 }
 
 // DisableFCM disables FCM for a user (token invalid)
-func (r *PocketBaseUserRepo) DisableFCM(ctx context.Context, userID string) error {
-    query := `UPDATE musers SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"updated": time.Now().UTC(),
-		"id": userID,
-	})
-	_, err := q.Execute()
-	return err
+func (r *UserRepo) DisableFCM(ctx context.Context, userID string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
 }
 
 // EnableFCM re-enables FCM with a new token
-func (r *PocketBaseUserRepo) EnableFCM(ctx context.Context, userID string, token string) error {
-    query := `UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"token": token,
-		"updated": time.Now().UTC(),
-		"id": userID,
-	})
-	_, err := q.Execute()
-	return err
+func (r *UserRepo) EnableFCM(ctx context.Context, userID string, token string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"token":   token,
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
 }
 
 // GetActiveUsers retrieves all users with active FCM
-func (r *PocketBaseUserRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error) {
-    query := `
-        SELECT * FROM musers 
-        WHERE is_fcm_active = TRUE 
-          AND fcm_token IS NOT NULL 
-          AND fcm_token != ''
-    `
-
-	var rawResults []dbx.NullStringMap
-	err := r.app.DB().NewQuery(query).All(&rawResults)
+func (r *UserRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error) {
+	users, err := db.GetAll[models.User](
+		r.helper,
+		`SELECT * FROM musers 
+		 WHERE is_fcm_active = TRUE 
+		   AND fcm_token IS NOT NULL 
+		   AND fcm_token != ''`,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return r.mapToUsers(rawResults)
-}
-
-// Helper functions
-
-func (r *PocketBaseUserRepo) mapToUser(raw dbx.NullStringMap) (*models.User, error) {
-	user := &models.User{}
-
-	user.ID = raw["id"].String
-	user.Email = raw["email"].String
-	user.FCMToken = raw["fcm_token"].String
-
-	// Parse boolean
-	if raw["is_fcm_active"].Valid {
-		var val bool
-		json.Unmarshal([]byte(raw["is_fcm_active"].String), &val)
-		user.IsFCMActive = val
+	// Convert []models.User to []*models.User
+	result := make([]*models.User, len(users))
+	for i := range users {
+		result[i] = &users[i]
 	}
-
-	// Parse timestamps
-	if raw["created"].Valid {
-		t, _ := time.Parse(time.RFC3339, raw["created"].String)
-		user.Created = t
-	}
-	if raw["updated"].Valid {
-		t, _ := time.Parse(time.RFC3339, raw["updated"].String)
-		user.Updated = t
-	}
-
-	return user, nil
-}
-
-func (r *PocketBaseUserRepo) mapToUsers(rawList []dbx.NullStringMap) ([]*models.User, error) {
-	users := make([]*models.User, 0, len(rawList))
-
-	for _, raw := range rawList {
-		user, err := r.mapToUser(raw)
-		if err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-
-	return users, nil
+	return result, nil
 }

@@ -28,9 +28,9 @@ func main() {
 	app := pocketbase.New()
 
 	// Initialize repositories
-	reminderRepo := pbRepo.NewPocketBaseReminderRepo(app)
-	userRepo := pbRepo.NewPocketBaseUserRepo(app)
-	queryRepo := pbRepo.NewPocketBaseQueryRepo(app)
+	reminderRepo := pbRepo.NewReminderRepo(app)
+	userRepo := pbRepo.NewUserRepo(app)
+	queryRepo := pbRepo.NewQueryRepo(app)
 
 	// Initialize services
 	// Note: FCM service is optional, we'll initialize it with a stub for now

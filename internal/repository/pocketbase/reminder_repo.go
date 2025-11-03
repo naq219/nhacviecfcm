@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"remiaq/internal/db"
 	"remiaq/internal/models"
 	"remiaq/internal/repository"
 
@@ -13,17 +14,17 @@ import (
 	"github.com/pocketbase/pocketbase"
 )
 
-type PocketBaseReminderRepo struct {
-	app *pocketbase.PocketBase
+type ReminderRepo struct {
+	helper db.DBHelperInterface
 }
 
-var _ repository.ReminderRepository = (*PocketBaseReminderRepo)(nil)
+var _ repository.ReminderRepository = (*ReminderRepo)(nil)
 
-func NewPocketBaseReminderRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
-	return &PocketBaseReminderRepo{app: app}
+func NewReminderRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
+	return &ReminderRepo{helper: db.NewDBHelper(app)}
 }
 
-func (r *PocketBaseReminderRepo) Create(ctx context.Context, reminder *models.Reminder) error {
+func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) error {
 	patternJSON, _ := json.Marshal(reminder.RecurrencePattern)
 
 	query := `
@@ -42,8 +43,7 @@ func (r *PocketBaseReminderRepo) Create(ctx context.Context, reminder *models.Re
         )
     `
 
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
+	return r.helper.Exec(query, dbx.Params{
 		"id":                reminder.ID,
 		"user_id":           reminder.UserID,
 		"title":             reminder.Title,
@@ -63,51 +63,32 @@ func (r *PocketBaseReminderRepo) Create(ctx context.Context, reminder *models.Re
 		"created":           reminder.Created,
 		"updated":           reminder.Updated,
 	})
-	_, err := q.Execute()
-	return err
 }
 
-func (r *PocketBaseReminderRepo) GetByID(ctx context.Context, id string) (*models.Reminder, error) {
-	query := `SELECT * FROM reminders WHERE id = {:id} LIMIT 1`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"id": id,
-	})
-
-	var raw map[string]any
-	err := q.One(&raw)
-	if err != nil {
-		return nil, err
-	}
-	return r.mapToReminder(raw)
+func (r *ReminderRepo) GetByID(ctx context.Context, id string) (*models.Reminder, error) {
+	return db.GetOne[models.Reminder](r.helper,
+		"SELECT * FROM reminders WHERE id = {:id} LIMIT 1",
+		dbx.Params{"id": id})
 }
 
 // GetByUserID retrieves all reminders for a specific user
-func (r *PocketBaseReminderRepo) GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error) {
-	query := `SELECT * FROM reminders WHERE user_id = {:user_id} ORDER BY next_trigger_at ASC`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"user_id": userID,
-	})
-
-	var rawResults []map[string]any
-	err := q.All(&rawResults)
+func (r *ReminderRepo) GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error) {
+	reminders, err := db.GetAll[models.Reminder](r.helper,
+		"SELECT * FROM reminders WHERE user_id = {:user_id} ORDER BY next_trigger_at ASC",
+		dbx.Params{"user_id": userID})
 	if err != nil {
 		return nil, err
 	}
 
-	reminders := make([]*models.Reminder, 0, len(rawResults))
-	for _, raw := range rawResults {
-		rem, err := r.mapToReminder(raw)
-		if err != nil {
-			continue
-		}
-		reminders = append(reminders, rem)
+	// Convert []models.Reminder to []*models.Reminder
+	result := make([]*models.Reminder, len(reminders))
+	for i := range reminders {
+		result[i] = &reminders[i]
 	}
-	return reminders, nil
+	return result, nil
 }
 
-func (r *PocketBaseReminderRepo) Update(ctx context.Context, reminder *models.Reminder) error {
+func (r *ReminderRepo) Update(ctx context.Context, reminder *models.Reminder) error {
 	patternJSON, _ := json.Marshal(reminder.RecurrencePattern)
 
 	query := `
@@ -124,8 +105,7 @@ func (r *PocketBaseReminderRepo) Update(ctx context.Context, reminder *models.Re
         WHERE id = {:id}
     `
 
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
+	return r.helper.Exec(query, dbx.Params{
 		"user_id":           reminder.UserID,
 		"title":             reminder.Title,
 		"description":       reminder.Description,
@@ -144,181 +124,91 @@ func (r *PocketBaseReminderRepo) Update(ctx context.Context, reminder *models.Re
 		"updated":           time.Now(),
 		"id":                reminder.ID,
 	})
-	_, err := q.Execute()
-	return err
 }
 
-func (r *PocketBaseReminderRepo) Delete(ctx context.Context, id string) error {
-	query := `DELETE FROM reminders WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"id": id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) Delete(ctx context.Context, id string) error {
+	return r.helper.Exec("DELETE FROM reminders WHERE id = {:id}",
+		dbx.Params{"id": id})
 }
 
-func (r *PocketBaseReminderRepo) GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error) {
+func (r *ReminderRepo) GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error) {
 	query := `
         SELECT * FROM reminders
         WHERE next_trigger_at <= {:before_time}
           AND status = 'active'
           AND (snooze_until IS NULL OR snooze_until <= {:before_time})
     `
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"before_time": beforeTime,
-	})
-
-	var rawResults []map[string]any
-	err := q.All(&rawResults)
+	
+	reminders, err := db.GetAll[models.Reminder](r.helper, query,
+		dbx.Params{"before_time": beforeTime})
 	if err != nil {
 		return nil, err
 	}
 
-	reminders := make([]*models.Reminder, 0, len(rawResults))
-	for _, raw := range rawResults {
-		rem, err := r.mapToReminder(raw)
-		if err != nil {
-			continue
-		}
-		reminders = append(reminders, rem)
+	// Convert []models.Reminder to []*models.Reminder
+	result := make([]*models.Reminder, len(reminders))
+	for i := range reminders {
+		result[i] = &reminders[i]
 	}
-	return reminders, nil
+	return result, nil
 }
 
-func (r *PocketBaseReminderRepo) UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error {
-	query := `UPDATE reminders SET next_trigger_at = {:next_trigger}, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"next_trigger": nextTrigger,
-		"updated":      time.Now(),
-		"id":           id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET next_trigger_at = {:next_trigger}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"next_trigger": nextTrigger,
+			"updated":      time.Now(),
+			"id":           id,
+		})
 }
 
-func (r *PocketBaseReminderRepo) IncrementRetryCount(ctx context.Context, id string) error {
-	query := `UPDATE reminders SET retry_count = retry_count + 1, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"updated": time.Now(),
-		"id":      id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) IncrementRetryCount(ctx context.Context, id string) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET retry_count = retry_count + 1, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"updated": time.Now(),
+			"id":      id,
+		})
 }
 
-func (r *PocketBaseReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt time.Time) error {
-	query := `UPDATE reminders SET status = {:status}, last_completed_at = {:completed_at}, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"status": "completed",
-		"completed_at": completedAt,
-		"updated": time.Now(),
-		"id": id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt time.Time) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET status = {:status}, last_completed_at = {:completed_at}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"status":       "completed",
+			"completed_at": completedAt,
+			"updated":      time.Now(),
+			"id":           id,
+		})
 }
 
-func (r *PocketBaseReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error {
-	query := `UPDATE reminders SET snooze_until = {:snooze_until}, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"snooze_until": snoozeUntil,
-		"updated": time.Now(),
-		"id": id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET snooze_until = {:snooze_until}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"snooze_until": snoozeUntil,
+			"updated":      time.Now(),
+			"id":           id,
+		})
 }
 
-func (r *PocketBaseReminderRepo) UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error {
-	query := `UPDATE reminders SET last_sent_at = {:sent_at}, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"sent_at": sentAt,
-		"updated": time.Now(),
-		"id": id,
-	})
-	_, err := q.Execute()
-	return err
+func (r *ReminderRepo) UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET last_sent_at = {:sent_at}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"sent_at": sentAt,
+			"updated": time.Now(),
+			"id":      id,
+		})
 }
 
-func (r *PocketBaseReminderRepo) UpdateStatus(ctx context.Context, id string, status string) error {
-	query := `UPDATE reminders SET status = {:status}, updated = {:updated} WHERE id = {:id}`
-	q := r.app.DB().NewQuery(query)
-	q.Bind(dbx.Params{
-		"status": status,
-		"updated": time.Now(),
-		"id": id,
-	})
-	_, err := q.Execute()
-	return err
-}
-
-// Helper: map raw DB row → Reminder struct
-func (r *PocketBaseReminderRepo) mapToReminder(raw map[string]any) (*models.Reminder, error) {
-	var pattern models.RecurrencePattern
-	if p, ok := raw["recurrence_pattern"].(string); ok && p != "" {
-		json.Unmarshal([]byte(p), &pattern)
-	}
-
-	rem := &models.Reminder{
-		ID:                getString(raw, "id"),
-		UserID:            getString(raw, "user_id"),
-		Title:             getString(raw, "title"),
-		Description:       getString(raw, "description"),
-		Type:              getString(raw, "type"),
-		CalendarType:      getString(raw, "calendar_type"),
-		NextTriggerAt:     getTime(raw, "next_trigger_at"),
-		TriggerTimeOfDay:  getString(raw, "trigger_time_of_day"),
-		RecurrencePattern: &pattern,
-		RepeatStrategy:    getString(raw, "repeat_strategy"),
-		RetryIntervalSec:  getInt(raw, "retry_interval_sec"),
-		MaxRetries:        getInt(raw, "max_retries"),
-		RetryCount:        getInt(raw, "retry_count"),
-		Status:            getString(raw, "status"),
-		Created:           getTime(raw, "created"),
-		Updated:           getTime(raw, "updated"),
-	}
-
-	if v := raw["snooze_until"]; v != nil {
-		t := getTime(raw, "snooze_until")
-		rem.SnoozeUntil = &t
-	}
-	if v := raw["last_completed_at"]; v != nil {
-		t := getTime(raw, "last_completed_at")
-		rem.LastCompletedAt = &t
-	}
-	if v := raw["last_sent_at"]; v != nil {
-		t := getTime(raw, "last_sent_at")
-		rem.LastSentAt = &t
-	}
-
-	return rem, nil
-}
-
-// Helper functions
-func getString(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func getInt(m map[string]any, key string) int {
-	if v, ok := m[key].(float64); ok {
-		return int(v)
-	}
-	return 0
-}
-
-func getTime(m map[string]any, key string) time.Time {
-	if v, ok := m[key].(time.Time); ok {
-		return v
-	}
-	return time.Time{}
+func (r *ReminderRepo) UpdateStatus(ctx context.Context, id string, status string) error {
+	return r.helper.Exec(
+		"UPDATE reminders SET status = {:status}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"status":  status,
+			"updated": time.Now(),
+			"id":      id,
+		})
 }

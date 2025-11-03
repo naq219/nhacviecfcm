@@ -1,0 +1,843 @@
+//------start file: user_repo.go -------
+package pocketbase
+
+import (
+	"context"
+	"time"
+
+	"remiaq/internal/db"
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+)
+
+// UserRepo implements repository.UserRepository
+type UserRepo struct {
+	helper db.DBHelperInterface // Use interface from db package
+}
+
+// Ensure implementation
+var _ repository.UserRepository = (*UserRepo)(nil)
+
+// NewUserRepo creates a new user repository
+func NewUserRepo(app *pocketbase.PocketBase) repository.UserRepository {
+	return &UserRepo{helper: db.NewDBHelper(app)}
+}
+
+// Create inserts a new user
+func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
+	return r.helper.Exec(
+		`INSERT INTO musers (id, email, fcm_token, is_fcm_active, created, updated)
+		 VALUES ({:id}, {:email}, {:fcm_token}, {:is_fcm_active}, {:created}, {:updated})`,
+		dbx.Params{
+			"id":            user.ID,
+			"email":         user.Email,
+			"fcm_token":     user.FCMToken,
+			"is_fcm_active": user.IsFCMActive,
+			"created":       time.Now().UTC(),
+			"updated":       time.Now().UTC(),
+		},
+	)
+}
+
+// GetByID retrieves a user by ID
+func (r *UserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
+	return db.GetOne[models.User](
+		r.helper,
+		"SELECT * FROM musers WHERE id = {:id}",
+		dbx.Params{"id": id},
+	)
+}
+
+// GetByEmail retrieves a user by email
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	return db.GetOne[models.User](
+		r.helper,
+		"SELECT * FROM musers WHERE email = {:email}",
+		dbx.Params{"email": email},
+	)
+}
+
+// Update updates user information
+func (r *UserRepo) Update(ctx context.Context, user *models.User) error {
+	return r.helper.Exec(
+		`UPDATE musers 
+		 SET email = {:email}, fcm_token = {:fcm_token}, is_fcm_active = {:is_fcm_active}, updated = {:updated}
+		 WHERE id = {:id}`,
+		dbx.Params{
+			"email":         user.Email,
+			"fcm_token":     user.FCMToken,
+			"is_fcm_active": user.IsFCMActive,
+			"updated":       time.Now().UTC(),
+			"id":            user.ID,
+		},
+	)
+}
+
+// UpdateFCMToken updates only the FCM token
+func (r *UserRepo) UpdateFCMToken(ctx context.Context, userID, token string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"token":   token,
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
+}
+
+// DisableFCM disables FCM for a user (token invalid)
+func (r *UserRepo) DisableFCM(ctx context.Context, userID string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET is_fcm_active = FALSE, fcm_token = NULL, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
+}
+
+// EnableFCM re-enables FCM with a new token
+func (r *UserRepo) EnableFCM(ctx context.Context, userID string, token string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"token":   token,
+			"updated": time.Now().UTC(),
+			"id":      userID,
+		},
+	)
+}
+
+// GetActiveUsers retrieves all users with active FCM
+func (r *UserRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error) {
+	users, err := db.GetAll[models.User](
+		r.helper,
+		`SELECT * FROM musers 
+		 WHERE is_fcm_active = TRUE 
+		   AND fcm_token IS NOT NULL 
+		   AND fcm_token != ''`,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert []models.User to []*models.User
+	result := make([]*models.User, len(users))
+	for i := range users {
+		result[i] = &users[i]
+	}
+	return result, nil
+}
+
+//------end file: user_repo.go ------
+
+//------start file: user_repo_test.go -------
+package pocketbase
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"remiaq/internal/models"
+
+	"github.com/pocketbase/dbx"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Helper function to create mock User row
+func mockUserRow(id, email, fcmToken string, isFCMActive bool) dbx.NullStringMap {
+	return dbx.NullStringMap{
+		"id":            {id, true},
+		"email":         {email, true},
+		"fcm_token":     {fcmToken, fcmToken != ""},
+		"is_fcm_active": {boolToString(isFCMActive), true},
+		"created":       {time.Now().UTC().Format(time.RFC3339), true},
+		"updated":       {time.Now().UTC().Format(time.RFC3339), true},
+	}
+}
+
+func boolToString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func TestUserRepo_Create(t *testing.T) {
+	t.Run("should create user successfully", func(t *testing.T) {
+		execCalled := false
+		user := &models.User{
+			ID:          "user123",
+			Email:       "test@example.com",
+			FCMToken:    "fcm_token_123",
+			IsFCMActive: true,
+		}
+
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					execCalled = true
+					assert.Contains(t, query, "INSERT INTO musers")
+					assert.Equal(t, user.ID, params["id"])
+					assert.Equal(t, user.Email, params["email"])
+					assert.Equal(t, user.FCMToken, params["fcm_token"])
+					assert.Equal(t, user.IsFCMActive, params["is_fcm_active"])
+					assert.NotNil(t, params["created"])
+					assert.NotNil(t, params["updated"])
+					return nil
+				},
+			},
+		}
+
+		err := repo.Create(context.Background(), user)
+		require.NoError(t, err)
+		assert.True(t, execCalled)
+	})
+
+	t.Run("should return error when exec fails", func(t *testing.T) {
+		user := &models.User{ID: "user123", Email: "test@example.com"}
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					return errors.New("database error")
+				},
+			},
+		}
+
+		err := repo.Create(context.Background(), user)
+		require.Error(t, err)
+	})
+}
+
+func TestUserRepo_GetByID(t *testing.T) {
+	t.Run("should return user successfully", func(t *testing.T) {
+		userID := "user123"
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				GetOneRowFn: func(query string, params dbx.Params) (dbx.NullStringMap, error) {
+					assert.Contains(t, query, "SELECT * FROM musers WHERE id = {:id}")
+					assert.Equal(t, userID, params["id"])
+					return mockUserRow(userID, "test@example.com", "fcm_token", true), nil
+				},
+			},
+		}
+
+		result, err := repo.GetByID(context.Background(), userID)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, userID, result.ID)
+		assert.Equal(t, "test@example.com", result.Email)
+	})
+
+	t.Run("should return error when query fails", func(t *testing.T) {
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				GetOneRowFn: func(query string, params dbx.Params) (dbx.NullStringMap, error) {
+					return nil, errors.New("user not found")
+				},
+			},
+		}
+
+		result, err := repo.GetByID(context.Background(), "nonexistent")
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+
+func TestUserRepo_GetByEmail(t *testing.T) {
+	t.Run("should return user by email successfully", func(t *testing.T) {
+		email := "test@example.com"
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				GetOneRowFn: func(query string, params dbx.Params) (dbx.NullStringMap, error) {
+					assert.Contains(t, query, "SELECT * FROM musers WHERE email = {:email}")
+					assert.Equal(t, email, params["email"])
+					return mockUserRow("user123", email, "fcm_token", true), nil
+				},
+			},
+		}
+
+		result, err := repo.GetByEmail(context.Background(), email)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, email, result.Email)
+		assert.Equal(t, "user123", result.ID)
+	})
+}
+
+func TestUserRepo_Update(t *testing.T) {
+	t.Run("should update user successfully", func(t *testing.T) {
+		execCalled := false
+		user := &models.User{
+			ID:          "user123",
+			Email:       "updated@example.com",
+			FCMToken:    "new_fcm_token",
+			IsFCMActive: false,
+		}
+
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					execCalled = true
+					assert.Contains(t, query, "UPDATE musers")
+					assert.Contains(t, query, "WHERE id = {:id}")
+					assert.Equal(t, user.Email, params["email"])
+					assert.Equal(t, user.FCMToken, params["fcm_token"])
+					assert.Equal(t, user.IsFCMActive, params["is_fcm_active"])
+					assert.Equal(t, user.ID, params["id"])
+					return nil
+				},
+			},
+		}
+
+		err := repo.Update(context.Background(), user)
+		require.NoError(t, err)
+		assert.True(t, execCalled)
+	})
+}
+
+func TestUserRepo_UpdateFCMToken(t *testing.T) {
+	t.Run("should update FCM token successfully", func(t *testing.T) {
+		userID := "user123"
+		token := "new_fcm_token"
+		execCalled := false
+
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					execCalled = true
+					assert.Contains(t, query, "UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE")
+					assert.Equal(t, token, params["token"])
+					assert.Equal(t, userID, params["id"])
+					return nil
+				},
+			},
+		}
+
+		err := repo.UpdateFCMToken(context.Background(), userID, token)
+		require.NoError(t, err)
+		assert.True(t, execCalled)
+	})
+}
+
+func TestUserRepo_DisableFCM(t *testing.T) {
+	t.Run("should disable FCM successfully", func(t *testing.T) {
+		userID := "user123"
+		execCalled := false
+
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					execCalled = true
+					assert.Contains(t, query, "UPDATE musers SET is_fcm_active = FALSE, fcm_token = NULL")
+					assert.Equal(t, userID, params["id"])
+					return nil
+				},
+			},
+		}
+
+		err := repo.DisableFCM(context.Background(), userID)
+		require.NoError(t, err)
+		assert.True(t, execCalled)
+	})
+}
+
+func TestUserRepo_EnableFCM(t *testing.T) {
+	t.Run("should enable FCM with new token", func(t *testing.T) {
+		userID := "user123"
+		token := "new_token"
+		execCalled := false
+
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				ExecFn: func(query string, params dbx.Params) error {
+					execCalled = true
+					assert.Contains(t, query, "UPDATE musers SET fcm_token = {:token}, is_fcm_active = TRUE")
+					assert.Equal(t, token, params["token"])
+					assert.Equal(t, userID, params["id"])
+					return nil
+				},
+			},
+		}
+
+		err := repo.EnableFCM(context.Background(), userID, token)
+		require.NoError(t, err)
+		assert.True(t, execCalled)
+	})
+}
+
+func TestUserRepo_GetActiveUsers(t *testing.T) {
+	t.Run("should return active users successfully", func(t *testing.T) {
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				GetAllRowsFn: func(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
+					assert.Contains(t, query, "SELECT * FROM musers")
+					assert.Contains(t, query, "WHERE is_fcm_active = TRUE")
+					assert.Contains(t, query, "AND fcm_token IS NOT NULL")
+					return []dbx.NullStringMap{
+						mockUserRow("user1", "user1@example.com", "token1", true),
+						mockUserRow("user2", "user2@example.com", "token2", true),
+					}, nil
+				},
+			},
+		}
+
+		result, err := repo.GetActiveUsers(context.Background())
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.Equal(t, "user1", result[0].ID)
+		assert.Equal(t, "user2", result[1].ID)
+	})
+
+	t.Run("should return empty slice when no active users", func(t *testing.T) {
+		repo := &UserRepo{
+			helper: &MockDBHelper{
+				GetAllRowsFn: func(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
+					return []dbx.NullStringMap{}, nil
+				},
+			},
+		}
+
+		result, err := repo.GetActiveUsers(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+}
+
+// Benchmark tests
+func BenchmarkUserRepo_GetByID(b *testing.B) {
+	repo := &UserRepo{
+		helper: &MockDBHelper{
+			GetOneRowFn: func(query string, params dbx.Params) (dbx.NullStringMap, error) {
+				return mockUserRow("user123", "test@example.com", "token", true), nil
+			},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = repo.GetByID(context.Background(), "user123")
+	}
+}
+
+func BenchmarkUserRepo_GetActiveUsers(b *testing.B) {
+	repo := &UserRepo{
+		helper: &MockDBHelper{
+			GetAllRowsFn: func(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
+				return []dbx.NullStringMap{
+					mockUserRow("user1", "user1@example.com", "token1", true),
+					mockUserRow("user2", "user2@example.com", "token2", true),
+				}, nil
+			},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = repo.GetActiveUsers(context.Background())
+	}
+}
+//------end file: user_repo_test.go ------
+
+//------start file: reminder.go -------
+package models
+
+import (
+	"time"
+)
+
+// Reminder represents a notification reminder
+type Reminder struct {
+	ID                string             `json:"id" db:"id"`
+	UserID            string             `json:"user_id" db:"user_id"`
+	Title             string             `json:"title" db:"title"`
+	Description       string             `json:"description" db:"description"`
+	Type              string             `json:"type" db:"type"`                   // one_time, recurring
+	CalendarType      string             `json:"calendar_type" db:"calendar_type"` // solar, lunar
+	NextTriggerAt     time.Time          `json:"next_trigger_at" db:"next_trigger_at"`
+	TriggerTimeOfDay  string             `json:"trigger_time_of_day" db:"trigger_time_of_day"` // HH:MM format
+	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern" db:"recurrence_pattern"`   // JSON field
+	RepeatStrategy    string             `json:"repeat_strategy" db:"repeat_strategy"`         // none, retry_until_complete
+	RetryIntervalSec  int                `json:"retry_interval_sec" db:"retry_interval_sec"`
+	MaxRetries        int                `json:"max_retries" db:"max_retries"`
+	RetryCount        int                `json:"retry_count" db:"retry_count"`
+	Status            string             `json:"status" db:"status"` // active, completed, paused
+	SnoozeUntil       *time.Time         `json:"snooze_until" db:"snooze_until"`
+	LastCompletedAt   *time.Time         `json:"last_completed_at" db:"last_completed_at"`
+	LastSentAt        *time.Time         `json:"last_sent_at" db:"last_sent_at"`
+	Created           time.Time          `json:"created" db:"created"`
+	Updated           time.Time          `json:"updated" db:"updated"`
+}
+
+// RecurrencePattern defines how a reminder repeats
+type RecurrencePattern struct {
+	Type            string `json:"type"`                       // daily, weekly, monthly, lunar_last_day_of_month
+	IntervalSeconds int    `json:"interval_seconds,omitempty"` // For interval-based recurrence
+	DayOfMonth      int    `json:"day_of_month,omitempty"`     // For monthly recurrence
+	DayOfWeek       int    `json:"day_of_week,omitempty"`      // For weekly recurrence (0=Sunday)
+	BaseOn          string `json:"base_on,omitempty"`          // creation, completion
+}
+
+// User represents a user with FCM token
+type User struct {
+	ID          string    `json:"id" db:"id"`
+	Email       string    `json:"email" db:"email"`
+	FCMToken    string    `json:"fcm_token" db:"fcm_token"`
+	IsFCMActive bool      `json:"is_fcm_active" db:"is_fcm_active"`
+	Created     time.Time `json:"created" db:"created"`
+	Updated     time.Time `json:"updated" db:"updated"`
+}
+
+// SystemStatus represents system configuration (singleton)
+type SystemStatus struct {
+    ID            int       `json:"mid" db:"mid"` // Always 1
+    WorkerEnabled bool      `json:"worker_enabled" db:"worker_enabled"`
+    LastError     string    `json:"last_error" db:"last_error"`
+    Updated       time.Time `json:"updated" db:"updated"`
+}
+
+// Constants for reminder types
+const (
+	ReminderTypeOneTime   = "one_time"
+	ReminderTypeRecurring = "recurring"
+)
+
+// Constants for calendar types
+const (
+	CalendarTypeSolar = "solar"
+	CalendarTypeLunar = "lunar"
+)
+
+// Constants for repeat strategies
+const (
+	RepeatStrategyNone               = "none"
+	RepeatStrategyRetryUntilComplete = "retry_until_complete"
+)
+
+// Constants for reminder status
+const (
+	ReminderStatusActive    = "active"
+	ReminderStatusCompleted = "completed"
+	ReminderStatusPaused    = "paused"
+)
+
+// Constants for recurrence pattern types
+const (
+	RecurrenceTypeDaily               = "daily"
+	RecurrenceTypeWeekly              = "weekly"
+	RecurrenceTypeMonthly             = "monthly"
+	RecurrenceTypeLunarLastDayOfMonth = "lunar_last_day_of_month"
+)
+
+// Constants for base_on
+const (
+	BaseOnCreation   = "creation"
+	BaseOnCompletion = "completion"
+)
+
+// Validate checks if reminder data is valid
+func (r *Reminder) Validate() error {
+	if r.Title == "" {
+		return &ValidationError{Field: "title", Message: "Title is required"}
+	}
+	if r.Type != ReminderTypeOneTime && r.Type != ReminderTypeRecurring {
+		return &ValidationError{Field: "type", Message: "Type must be one_time or recurring"}
+	}
+	if r.CalendarType != CalendarTypeSolar && r.CalendarType != CalendarTypeLunar {
+		return &ValidationError{Field: "calendar_type", Message: "Calendar type must be solar or lunar"}
+	}
+	return nil
+}
+
+// ValidationError represents a validation error
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Field + ": " + e.Message
+}
+
+// IsRetryable checks if reminder can be retried
+func (r *Reminder) IsRetryable() bool {
+	return r.RepeatStrategy == RepeatStrategyRetryUntilComplete &&
+		r.RetryCount < r.MaxRetries
+}
+
+// ShouldSend checks if reminder should be sent now
+func (r *Reminder) ShouldSend(now time.Time) bool {
+	if r.Status != ReminderStatusActive {
+		return false
+	}
+
+	// Check snooze
+	if r.SnoozeUntil != nil && now.Before(*r.SnoozeUntil) {
+		return false
+	}
+
+	// Check trigger time
+	return !now.Before(r.NextTriggerAt)
+}
+
+//------end file: reminder.go ------
+
+//------start file: interface.go -------
+package repository
+
+import (
+	"context"
+	"time"
+
+	"remiaq/internal/models"
+)
+
+// ReminderRepository defines operations for reminder data access
+type ReminderRepository interface {
+	// CRUD operations
+	Create(ctx context.Context, reminder *models.Reminder) error
+	GetByID(ctx context.Context, id string) (*models.Reminder, error)
+	Update(ctx context.Context, reminder *models.Reminder) error
+	Delete(ctx context.Context, id string) error
+
+	// Query operations
+	GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error)
+	GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error)
+
+	// Specific updates
+	UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error
+	UpdateStatus(ctx context.Context, id string, status string) error
+	IncrementRetryCount(ctx context.Context, id string) error
+	UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error
+	MarkCompleted(ctx context.Context, id string, completedAt time.Time) error
+	UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error
+}
+
+// UserRepository defines operations for user data access
+type UserRepository interface {
+	// CRUD operations
+	Create(ctx context.Context, user *models.User) error
+	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	Update(ctx context.Context, user *models.User) error
+
+	// FCM token management
+	UpdateFCMToken(ctx context.Context, userID, token string) error
+	DisableFCM(ctx context.Context, userID string) error
+	EnableFCM(ctx context.Context, userID string, token string) error
+
+	// Query operations
+	GetActiveUsers(ctx context.Context) ([]*models.User, error)
+}
+
+// SystemStatusRepository defines operations for system status management
+type SystemStatusRepository interface {
+	// Get singleton instance
+	Get(ctx context.Context) (*models.SystemStatus, error)
+
+	// Worker control
+	IsWorkerEnabled(ctx context.Context) (bool, error)
+	EnableWorker(ctx context.Context) error
+	DisableWorker(ctx context.Context, errorMsg string) error
+
+	// Error tracking
+	UpdateError(ctx context.Context, errorMsg string) error
+	ClearError(ctx context.Context) error
+}
+
+// QueryRepository defines operations for raw SQL queries (existing functionality)
+type QueryRepository interface {
+	// Raw query operations
+	ExecuteSelect(ctx context.Context, query string) ([]map[string]interface{}, error)
+	ExecuteInsert(ctx context.Context, query string) (rowsAffected int64, lastInsertId int64, err error)
+	ExecuteUpdate(ctx context.Context, query string) (rowsAffected int64, err error)
+	ExecuteDelete(ctx context.Context, query string) (rowsAffected int64, err error)
+}
+
+//------end file: interface.go ------
+
+//------start file: db_utils.go -------
+package db
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+)
+
+// DBHelperInterface defines the interface for database operations
+// This allows for easy mocking in tests
+type DBHelperInterface interface {
+	GetOneRow(query string, params dbx.Params) (dbx.NullStringMap, error)
+	GetAllRows(query string, params dbx.Params) ([]dbx.NullStringMap, error)
+	Exec(query string, params dbx.Params) error
+	Count(query string, params dbx.Params) (int, error)
+	Exists(query string, params dbx.Params) (bool, error)
+}
+
+type DBHelper struct {
+	App *pocketbase.PocketBase
+}
+
+// NewDBHelper returns a helper bound to the current PocketBase app
+func NewDBHelper(app *pocketbase.PocketBase) *DBHelper {
+	return &DBHelper{App: app}
+}
+
+// GetOneRow runs a query and returns a single row as raw map.
+// Returns error if no row found or query fails.
+func (h *DBHelper) GetOneRow(query string, params dbx.Params) (dbx.NullStringMap, error) {
+	var result dbx.NullStringMap
+	q := h.App.DB().NewQuery(query).Bind(params)
+	err := q.One(&result)
+	if err != nil {
+		log.Printf("[DBHelper] GetOneRow failed (query=%s): %v", query, err)
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetOne is a generic function that runs a query and returns a single row mapped to struct T.
+// Go doesn't support generic methods, so this is implemented as a function.
+// Accepts both *DBHelper and DBHelperInterface for flexibility.
+// Usage: user, err := db.GetOne[User](helper, "SELECT * FROM users WHERE id = {:id}", dbx.Params{"id": 1})
+func GetOne[T any](h DBHelperInterface, query string, params dbx.Params) (*T, error) {
+	raw, err := h.GetOneRow(query, params)
+	if err != nil {
+		return nil, err
+	}
+	return MapNullStringMapToStruct[T](raw)
+}
+
+// GetOneWithConfig is a generic function that runs a query and returns a single row mapped to struct T with config.
+// Supports custom mappers and required field validation.
+// Usage: user, err := db.GetOneWithConfig[User](helper, query, params, &db.MapperConfig{RequiredFields: []string{"ID"}})
+func GetOneWithConfig[T any](h DBHelperInterface, query string, params dbx.Params, cfg *MapperConfig) (*T, error) {
+	raw, err := h.GetOneRow(query, params)
+	if err != nil {
+		return nil, err
+	}
+	return MapNullStringMapToStructWithConfig[T](raw, cfg)
+}
+
+// GetAllRows runs a query and returns all rows as raw maps.
+// Returns error if query fails.
+func (h *DBHelper) GetAllRows(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
+	var results []dbx.NullStringMap
+	q := h.App.DB().NewQuery(query).Bind(params)
+	err := q.All(&results)
+	if err != nil {
+		log.Printf("[DBHelper] GetAllRows failed (query=%s): %v", query, err)
+		return nil, err
+	}
+	return results, nil
+}
+
+// GetAll is a generic function that runs a query and returns all rows mapped to slice of struct T.
+// Usage: users, err := db.GetAll[User](helper, "SELECT * FROM users", dbx.Params{})
+func GetAll[T any](h DBHelperInterface, query string, params dbx.Params) ([]T, error) {
+	rows, err := h.GetAllRows(query, params)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]T, len(rows))
+	for i, row := range rows {
+		mapped, err := MapNullStringMapToStruct[T](row)
+		if err != nil {
+			return nil, fmt.Errorf("failed to map row %d: %w", i, err)
+		}
+		results[i] = *mapped
+	}
+
+	return results, nil
+}
+
+// GetAllWithConfig is a generic function that runs a query and returns all rows mapped to slice of struct T with config.
+// Usage: users, err := db.GetAllWithConfig[User](helper, query, params, &db.MapperConfig{RequiredFields: []string{"ID"}})
+func GetAllWithConfig[T any](h DBHelperInterface, query string, params dbx.Params, cfg *MapperConfig) ([]T, error) {
+	rows, err := h.GetAllRows(query, params)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]T, len(rows))
+	for i, row := range rows {
+		mapped, err := MapNullStringMapToStructWithConfig[T](row, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to map row %d: %w", i, err)
+		}
+		results[i] = *mapped
+	}
+
+	return results, nil
+}
+
+// Exec runs INSERT, UPDATE, DELETE queries.
+// Returns error if execution fails.
+func (h *DBHelper) Exec(query string, params dbx.Params) error {
+	q := h.App.DB().NewQuery(query).Bind(params)
+	_, err := q.Execute()
+	if err != nil {
+		log.Printf("[DBHelper] Exec failed (query=%s): %v", query, err)
+		return err
+	}
+	return nil
+}
+
+// ExecWithContext runs INSERT, UPDATE, DELETE with context support.
+// Returns error if context is cancelled or execution fails.
+func (h *DBHelper) ExecWithContext(ctx context.Context, query string, params dbx.Params) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return h.Exec(query, params)
+	}
+}
+
+// Count runs a COUNT query and returns the row count.
+// Query should use "SELECT COUNT(*) AS count" pattern for predictable parsing.
+// Example: "SELECT COUNT(*) AS count FROM users WHERE status = {:status}"
+func (h *DBHelper) Count(query string, params dbx.Params) (int, error) {
+	var result struct {
+		Count int `db:"count"`
+	}
+	q := h.App.DB().NewQuery(query).Bind(params)
+	err := q.One(&result)
+	if err != nil {
+		log.Printf("[DBHelper] Count failed (query=%s): %v", query, err)
+		return 0, err
+	}
+	return result.Count, nil
+}
+
+// Exists checks if a query returns any rows using SQL EXISTS for better performance.
+// Much faster than Count for large datasets since it stops after finding the first match.
+// Example: "SELECT * FROM users WHERE email = {:email}"
+func (h *DBHelper) Exists(query string, params dbx.Params) (bool, error) {
+	// Wrap query with EXISTS to get true/false
+	existsQuery := fmt.Sprintf("SELECT EXISTS(%s) AS ok", query)
+	var result struct {
+		Ok bool `db:"ok"`
+	}
+	q := h.App.DB().NewQuery(existsQuery).Bind(params)
+	err := q.One(&result)
+	if err != nil {
+		log.Printf("[DBHelper] Exists failed (query=%s): %v", query, err)
+		return false, err
+	}
+	return result.Ok, nil
+}
+
+//------end file: db_utils.go ------
