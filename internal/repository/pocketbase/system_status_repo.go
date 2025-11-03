@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
 	"time"
 
 	"remiaq/internal/models"
@@ -30,6 +31,7 @@ func NewPocketBaseSystemStatusRepo(app *pocketbase.PocketBase) repository.System
 func (r *PocketBaseSystemStatusRepo) Get(ctx context.Context) (*models.SystemStatus, error) {
 	query := `SELECT * FROM system_status WHERE mid = 1`
 
+	log.Printf("Executing Get query for system status")
 	var rawResult dbx.NullStringMap
 	err := r.app.DB().NewQuery(query).One(&rawResult)
 	log.Printf("rawResult: %v", rawResult)
@@ -118,9 +120,13 @@ func (r *PocketBaseSystemStatusRepo) mapToSystemStatus(raw dbx.NullStringMap) (*
 
 	// Parse worker_enabled
 	if raw["worker_enabled"].Valid {
-		var enabled bool
-		json.Unmarshal([]byte(raw["worker_enabled"].String), &enabled)
-		status.WorkerEnabled = enabled
+		enabled, err := strconv.ParseBool(raw["worker_enabled"].String)
+		if err != nil {
+			log.Printf("Error parsing worker_enabled: %v", err)
+			status.WorkerEnabled = false // Default to false on error
+		} else {
+			status.WorkerEnabled = enabled
+		}
 	}
 
 	// Last error

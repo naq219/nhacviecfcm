@@ -20,7 +20,10 @@
       try {
         const res = await fetch(`${API_BASE}/api/system_status`);
         const data = await res.json();
+
         if (!data || !data.data) throw new Error('No data');
+        console.log(data);
+
         const s = data.data;
         document.getElementById('worker_enabled').textContent = s.worker_enabled ? 'true' : 'false';
         document.getElementById('last_error').textContent = s.last_error || '';
