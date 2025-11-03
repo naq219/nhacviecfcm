@@ -1,0 +1,1109 @@
+-----start cmd/server/main.go----
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"time"
+
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
+
+	"remiaq/config"
+	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
+	"remiaq/internal/middleware"
+	pbRepo "remiaq/internal/repository/pocketbase"
+	"remiaq/internal/services"
+	"remiaq/internal/worker"
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Set PocketBase server address
+	os.Setenv("PB_ADDR", cfg.ServerAddr)
+
+	// Create PocketBase instance
+	app := pocketbase.New()
+
+	// Initialize repositories
+	reminderRepo := pbRepo.NewReminderRepo(app)
+	userRepo := pbRepo.NewUserRepo(app)
+	queryRepo := pbRepo.NewQueryRepo(app)
+
+	// Initialize services
+	// Note: FCM service is optional, we'll initialize it with a stub for now
+	var fcmService *services.FCMService
+	if _, err := os.Stat(cfg.FCMCredentials); err == nil {
+		fcmService, err = services.NewFCMService(cfg.FCMCredentials)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize FCM service: %v", err)
+			// Continue without FCM for development
+		}
+	} else {
+		log.Println("Warning: FCM credentials not found, notifications disabled")
+	}
+
+	lunarCalendar := services.NewLunarCalendar()
+	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
+	reminderService := services.NewReminderService(reminderRepo, userRepo, fcmService, schedCalculator)
+
+	// Initialize handlers
+	reminderHandler := handlers.NewReminderHandler(reminderService)
+	queryHandler := handlers.NewQueryHandler(queryRepo)
+
+	// Initialize system status repo and start background worker
+	sysRepo := pbRepo.NewSystemStatusRepo(app)
+	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := worker.NewWorker(sysRepo, reminderService, time.Duration(cfg.WorkerInterval)*time.Second)
+	w.Start(bgCtx)
+
+	// Setup routes
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Handle preflight OPTIONS requests
+		se.Router.OPTIONS("/*", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			return re.NoContent(204)
+		})
+
+		// Health check
+		se.Router.GET("/hello", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			return re.String(200, "RemiAq API is running!")
+		})
+
+		// Raw SQL query endpoints (from original main.go)
+		se.Router.GET("/api/rquery", queryHandler.HandleSelect)
+		se.Router.POST("/api/rquery", queryHandler.HandleSelect)
+
+		se.Router.GET("/api/rinsert", queryHandler.HandleInsert)
+		se.Router.POST("/api/rinsert", queryHandler.HandleInsert)
+
+		se.Router.GET("/api/rupdate", queryHandler.HandleUpdate)
+		se.Router.PUT("/api/rupdate", queryHandler.HandleUpdate)
+
+		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
+		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
+
+		// Reminder CRUD endpoints
+		se.Router.POST("/api/reminders", reminderHandler.CreateReminder)
+		se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
+		se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
+		se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
+
+		// User reminders
+		se.Router.GET("/api/users/{userId}/reminders", reminderHandler.GetUserReminders)
+
+		// Reminder actions
+		se.Router.POST("/api/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		se.Router.POST("/api/reminders/{id}/complete", reminderHandler.CompleteReminder)
+
+		// System status API
+		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
+		se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
+
+		// Simple HTML test page
+		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Đọc file HTML tĩnh
+			content, err := os.ReadFile("web/system_status_test.html")
+			if err != nil {
+				return re.String(404, "Test page not found")
+			}
+			re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return re.String(200, string(content))
+		})
+
+		return se.Next()
+	})
+
+	// Start server
+	log.Printf("Starting RemiAq API server on %s", cfg.ServerAddr)
+	if err := app.Start(); err != nil {
+		log.Fatal(err)
+	}
+}
+-----end cmd/server/main.go----
+-----start config/config.go----
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// Config holds application configuration
+type Config struct {
+	ServerAddr     string
+	WorkerInterval int    // seconds
+	FCMCredentials string // path to firebase credentials JSON
+	Environment    string // development, production
+}
+
+// ValidationError represents configuration validation error
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("config validation error for %s: %s", e.Field, e.Message)
+}
+
+// Load loads configuration from environment variables with validation
+func Load() (*Config, error) {
+	cfg := &Config{
+		ServerAddr:     getEnv("SERVER_ADDR", "127.0.0.1:8888"),
+		WorkerInterval: getEnvInt("WORKER_INTERVAL", 10),
+		FCMCredentials: getEnv("FCM_CREDENTIALS", "./firebase-credentials.json"),
+		Environment:    getEnv("ENVIRONMENT", "development"),
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+// Validate validates configuration values
+func (c *Config) Validate() error {
+	// Validate ServerAddr
+	if c.ServerAddr == "" {
+		return &ValidationError{Field: "ServerAddr", Message: "cannot be empty"}
+	}
+	if !strings.Contains(c.ServerAddr, ":") {
+		return &ValidationError{Field: "ServerAddr", Message: "must contain port (format: host:port)"}
+	}
+
+	// Validate WorkerInterval
+	if c.WorkerInterval <= 0 {
+		return &ValidationError{Field: "WorkerInterval", Message: "must be positive"}
+	}
+	if c.WorkerInterval > 3600 {
+		return &ValidationError{Field: "WorkerInterval", Message: "cannot exceed 3600 seconds (1 hour)"}
+	}
+
+	// Validate FCMCredentials
+	if c.FCMCredentials == "" {
+		return &ValidationError{Field: "FCMCredentials", Message: "cannot be empty"}
+	}
+
+	// Validate Environment
+	validEnvs := []string{"development", "production", "testing"}
+	if !contains(validEnvs, c.Environment) {
+		return &ValidationError{Field: "Environment", Message: fmt.Sprintf("must be one of: %s", strings.Join(validEnvs, ", "))}
+	}
+
+	return nil
+}
+
+// IsDevelopment returns true if environment is development
+func (c *Config) IsDevelopment() bool {
+	return c.Environment == "development"
+}
+
+// IsProduction returns true if environment is production
+func (c *Config) IsProduction() bool {
+	return c.Environment == "production"
+}
+
+// IsTesting returns true if environment is testing
+func (c *Config) IsTesting() bool {
+	return c.Environment == "testing"
+}
+
+// getEnv gets environment variable with fallback
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// getEnvInt gets environment variable as integer with fallback
+func getEnvInt(key string, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if intVal, err := strconv.Atoi(value); err == nil {
+			return intVal
+		}
+	}
+	return fallback
+}
+
+// contains checks if slice contains string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+-----end config/config.go----
+-----start internal/handlers/reminder_handler.go----
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"remiaq/internal/middleware"
+	"remiaq/internal/models"
+	"remiaq/internal/utils"
+
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// ReminderServiceInterface defines the interface for reminder service
+type ReminderServiceInterface interface {
+	CreateReminder(ctx context.Context, reminder *models.Reminder) error
+	GetReminder(ctx context.Context, id string) (*models.Reminder, error)
+	UpdateReminder(ctx context.Context, reminder *models.Reminder) error
+	DeleteReminder(ctx context.Context, id string) error
+	GetUserReminders(ctx context.Context, userID string) ([]*models.Reminder, error)
+	SnoozeReminder(ctx context.Context, id string, duration time.Duration) error
+	CompleteReminder(ctx context.Context, id string) error
+	ProcessDueReminders(ctx context.Context) error
+}
+
+// ReminderHandler handles reminder HTTP requests
+type ReminderHandler struct {
+	reminderService ReminderServiceInterface
+}
+
+// NewReminderHandler creates a new reminder handler
+func NewReminderHandler(reminderService ReminderServiceInterface) *ReminderHandler {
+	return &ReminderHandler{
+		reminderService: reminderService,
+	}
+}
+
+// CreateReminder handles POST /api/reminders
+func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	var reminder models.Reminder
+	if err := json.NewDecoder(re.Request.Body).Decode(&reminder); err != nil {
+		return utils.SendError(re, 400, "Invalid request body", err)
+	}
+
+	// Create reminder
+	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
+		return utils.SendError(re, 400, "Failed to create reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder created successfully", reminder)
+}
+
+// GetReminder handles GET /api/reminders/:id
+func (h *ReminderHandler) GetReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return utils.SendError(re, 400, "Reminder ID is required", nil)
+	}
+
+	reminder, err := h.reminderService.GetReminder(re.Request.Context(), id)
+	if err != nil {
+		return utils.SendError(re, 404, "Reminder not found", err)
+	}
+
+	return utils.SendSuccess(re, "", reminder)
+}
+
+// UpdateReminder handles PUT /api/reminders/:id
+func (h *ReminderHandler) UpdateReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return utils.SendError(re, 400, "Reminder ID is required", nil)
+	}
+
+	var reminder models.Reminder
+	if err := json.NewDecoder(re.Request.Body).Decode(&reminder); err != nil {
+		return utils.SendError(re, 400, "Invalid request body", err)
+	}
+
+	reminder.ID = id
+
+	if err := h.reminderService.UpdateReminder(re.Request.Context(), &reminder); err != nil {
+		return utils.SendError(re, 400, "Failed to update reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder updated successfully", reminder)
+}
+
+// DeleteReminder handles DELETE /api/reminders/:id
+func (h *ReminderHandler) DeleteReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return utils.SendError(re, 400, "Reminder ID is required", nil)
+	}
+
+	if err := h.reminderService.DeleteReminder(re.Request.Context(), id); err != nil {
+		return utils.SendError(re, 400, "Failed to delete reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder deleted successfully", nil)
+}
+
+// GetUserReminders handles GET /api/users/:userId/reminders
+func (h *ReminderHandler) GetUserReminders(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	userID := re.Request.PathValue("userId")
+	if userID == "" {
+		return utils.SendError(re, 400, "User ID is required", nil)
+	}
+
+	reminders, err := h.reminderService.GetUserReminders(re.Request.Context(), userID)
+	if err != nil {
+		return utils.SendError(re, 400, "Failed to get reminders", err)
+	}
+
+	return utils.SendSuccess(re, "", reminders)
+}
+
+// SnoozeReminder handles POST /api/reminders/:id/snooze
+func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return utils.SendError(re, 400, "Reminder ID is required", nil)
+	}
+
+	var req struct {
+		Duration int `json:"duration"` // Duration in seconds
+	}
+
+	if err := json.NewDecoder(re.Request.Body).Decode(&req); err != nil {
+		return utils.SendError(re, 400, "Invalid request body", err)
+	}
+
+	duration := time.Duration(req.Duration) * time.Second
+	if err := h.reminderService.SnoozeReminder(re.Request.Context(), id, duration); err != nil {
+		return utils.SendError(re, 400, "Failed to snooze reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder snoozed successfully", nil)
+}
+
+// CompleteReminder handles POST /api/reminders/:id/complete
+func (h *ReminderHandler) CompleteReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return utils.SendError(re, 400, "Reminder ID is required", nil)
+	}
+
+	if err := h.reminderService.CompleteReminder(re.Request.Context(), id); err != nil {
+		return utils.SendError(re, 400, "Failed to complete reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder completed successfully", nil)
+}
+-----end internal/handlers/reminder_handler.go----
+-----start internal/middleware/validation.go----
+package middleware
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+// SQL validation patterns
+var (
+	dangerousPatterns = []string{
+		`(?i)\bDROP\b`,
+		`(?i)\bTRUNCATE\b`,
+		`(?i)\bALTER\b`,
+		`(?i)\bCREATE\b`,
+		`(?i)--`,
+		`(?i)/\*`,
+		`(?i)\*/`,
+		`(?i)\bEXEC\b`,
+		`(?i)\bEVAL\b`,
+		`(?i)\bSYSTEM\b`,
+		`(?i)\bSHUTDOWN\b`,
+		`(?i)\bGRANT\b`,
+		`(?i)\bREVOKE\b`,
+		`(?i)\bLOAD_FILE\b`,
+		`(?i)\bINTO\s+OUTFILE\b`,
+		`(?i)\bINTO\s+DUMPFILE\b`,
+	}
+
+	updateWherePattern = regexp.MustCompile(`(?i)UPDATE\s+.*\s+WHERE\s+`)
+	deleteWherePattern = regexp.MustCompile(`(?i)DELETE\s+FROM\s+.*\s+WHERE\s+`)
+)
+
+// ValidateQuery validates a SQL query for safety
+func ValidateQuery(query string) error {
+	if strings.TrimSpace(query) == "" {
+		return errors.New("query cannot be empty")
+	}
+
+	// Check for dangerous patterns
+	for _, pattern := range dangerousPatterns {
+		if matched, _ := regexp.MatchString(pattern, query); matched {
+			return errors.New("query contains potentially dangerous operations")
+		}
+	}
+
+	return nil
+}
+
+// ValidateSelectQuery validates a SELECT query
+func ValidateSelectQuery(query string) error {
+	if err := ValidateQuery(query); err != nil {
+		return err
+	}
+
+	trimmedQuery := strings.ToUpper(strings.TrimSpace(query))
+	if !strings.HasPrefix(trimmedQuery, "SELECT") {
+		return errors.New("only SELECT statements are allowed")
+	}
+
+	return nil
+}
+
+// ValidateInsertQuery validates an INSERT query
+func ValidateInsertQuery(query string) error {
+	if err := ValidateQuery(query); err != nil {
+		return err
+	}
+
+	trimmedQuery := strings.ToUpper(strings.TrimSpace(query))
+	if !strings.HasPrefix(trimmedQuery, "INSERT") {
+		return errors.New("only INSERT statements are allowed")
+	}
+
+	return nil
+}
+
+// ValidateUpdateQuery validates an UPDATE query
+func ValidateUpdateQuery(query string) error {
+	if err := ValidateQuery(query); err != nil {
+		return err
+	}
+
+	trimmedQuery := strings.ToUpper(strings.TrimSpace(query))
+	if !strings.HasPrefix(trimmedQuery, "UPDATE") {
+		return errors.New("only UPDATE statements are allowed")
+	}
+
+	// Require WHERE clause for UPDATE
+	if !updateWherePattern.MatchString(query) {
+		return errors.New("UPDATE statements must include a WHERE clause for safety")
+	}
+
+	return nil
+}
+
+// ValidateDeleteQuery validates a DELETE query
+func ValidateDeleteQuery(query string) error {
+	if err := ValidateQuery(query); err != nil {
+		return err
+	}
+
+	trimmedQuery := strings.ToUpper(strings.TrimSpace(query))
+	if !strings.HasPrefix(trimmedQuery, "DELETE") {
+		return errors.New("only DELETE statements are allowed")
+	}
+
+	// Require WHERE clause for DELETE
+	if !deleteWherePattern.MatchString(query) {
+		return errors.New("DELETE statements must include a WHERE clause for safety")
+	}
+
+	return nil
+}
+-----end internal/middleware/validation.go----
+-----start internal/services/lunar_calendar.go----
+package services
+
+import (
+	"math"
+	"time"
+)
+
+// LunarDate represents a date in lunar calendar
+type LunarDate struct {
+	Year     int  `json:"year"`
+	Month    int  `json:"month"`
+	Day      int  `json:"day"`
+	IsLeap   bool `json:"is_leap"`   // Tháng nhuận
+	LeapYear bool `json:"leap_year"` // Năm nhuận
+}
+
+// LunarCalendar handles lunar calendar conversions using Vietnamese lunar calendar algorithm
+type LunarCalendar struct {
+	timeZone int // GMT+7 for Vietnam
+}
+
+// NewLunarCalendar creates a new lunar calendar service for Vietnam timezone
+func NewLunarCalendar() *LunarCalendar {
+	return &LunarCalendar{
+		timeZone: 7, // GMT+7 for Vietnam
+	}
+}
+
+// SolarToLunar converts solar date to lunar date using Vietnamese lunar calendar
+func (lc *LunarCalendar) SolarToLunar(solar time.Time) LunarDate {
+	// Chuyển về múi giờ Việt Nam
+	vietnamTime := solar.In(time.FixedZone("ICT", 7*3600))
+	
+	// Tính Julian Day Number
+	jd := lc.getJulianDayNumber(vietnamTime.Year(), int(vietnamTime.Month()), vietnamTime.Day())
+	
+	// Tìm tháng 11 âm lịch của năm trước
+	k := int(math.Floor(float64(vietnamTime.Year()-1900)*12.3685))
+	
+	// Tìm new moon gần nhất
+	nm := lc.getNewMoonDay(k, lc.timeZone)
+	sunLong := lc.getSunLongitude(nm, lc.timeZone)
+	
+	// Điều chỉnh để tìm đúng tháng 11
+	if sunLong >= 9 {
+		nm = lc.getNewMoonDay(k-1, lc.timeZone)
+	}
+	
+	// Tìm các new moon trong năm
+	for i := 1; i <= 14; i++ {
+		lastNm := nm
+		nm = lc.getNewMoonDay(k+i, lc.timeZone)
+		sunLong = lc.getSunLongitude(nm, lc.timeZone)
+		
+		if jd < nm {
+			// Tính tháng và ngày âm lịch
+			lunarMonth := i
+			lunarDay := int(jd - lastNm + 1)
+			lunarYear := vietnamTime.Year()
+			
+			// Điều chỉnh năm nếu cần
+			if lunarMonth >= 11 {
+				lunarYear = vietnamTime.Year() + 1
+			}
+			
+			// Điều chỉnh tháng (tháng 11, 12 thuộc năm sau)
+			if lunarMonth >= 11 {
+				lunarMonth = lunarMonth - 12
+			}
+			if lunarMonth <= 0 {
+				lunarMonth = lunarMonth + 12
+			}
+			
+			return LunarDate{
+				Year:     lunarYear,
+				Month:    lunarMonth,
+				Day:      lunarDay,
+				IsLeap:   false, // Simplified - không tính tháng nhuận trong version này
+				LeapYear: lc.isLeapYear(lunarYear),
+			}
+		}
+	}
+	
+	// Fallback nếu không tìm được
+	return LunarDate{
+		Year:  vietnamTime.Year(),
+		Month: int(vietnamTime.Month()),
+		Day:   vietnamTime.Day(),
+	}
+}
+
+// LunarToSolar converts lunar date to solar date
+func (lc *LunarCalendar) LunarToSolar(year, month, day int) time.Time {
+	// Tìm new moon của tháng đó
+	k := int(math.Floor(float64(year-1900)*12.3685 + float64(month-1)))
+	nm := lc.getNewMoonDay(k, lc.timeZone)
+	
+	// Tính ngày dương lịch
+	jd := nm + float64(day-1)
+	
+	return lc.julianToGregorian(jd)
+}
+
+// GetLunarMonthDays returns number of days in a lunar month
+func (lc *LunarCalendar) GetLunarMonthDays(year, month int) int {
+	// Tính new moon của tháng hiện tại và tháng sau
+	k := int(math.Floor(float64(year-1900)*12.3685 + float64(month-1)))
+	nm1 := lc.getNewMoonDay(k, lc.timeZone)
+	nm2 := lc.getNewMoonDay(k+1, lc.timeZone)
+	
+	return int(nm2 - nm1)
+}
+
+// isLeapYear kiểm tra năm nhuận âm lịch
+func (lc *LunarCalendar) isLeapYear(year int) bool {
+	// Năm nhuận âm lịch có 13 tháng thay vì 12 tháng
+	// Chu kỳ 19 năm có 7 năm nhuận
+	return (year*12+17)%19 < 12
+}
+
+// getJulianDayNumber tính Julian Day Number
+func (lc *LunarCalendar) getJulianDayNumber(year, month, day int) float64 {
+	if month <= 2 {
+		year--
+		month += 12
+	}
+	
+	a := math.Floor(float64(year) / 100)
+	b := 2 - a + math.Floor(a/4)
+	
+	jd := math.Floor(365.25*float64(year+4716)) + math.Floor(30.6001*float64(month+1)) + float64(day) + b - 1524.5
+	
+	return jd
+}
+
+// getNewMoonDay tính ngày new moon
+func (lc *LunarCalendar) getNewMoonDay(k int, timeZone int) float64 {
+	// Thuật toán tính new moon dựa trên Meeus
+	T := float64(k) / 1236.85 // Time in Julian centuries
+	T2 := T * T
+	T3 := T2 * T
+	T4 := T3 * T
+	
+	// Mean new moon
+	Jd1 := 2415020.75933 + 29.53058868*float64(k) + 0.0001178*T2 - 0.000000155*T3 + 0.00000000033*T4
+	
+	// Sun's mean anomaly
+	M := 2.5534 + 29.10535670*float64(k) - 0.0000014*T2 - 0.00000011*T3
+	
+	// Moon's mean anomaly  
+	Mpr := 201.5643 + 385.81693528*float64(k) + 0.0107582*T2 + 0.00001238*T3 - 0.000000058*T4
+	
+	// Moon's argument of latitude
+	F := 160.7108 + 390.67050284*float64(k) - 0.0016118*T2 - 0.00000227*T3 + 0.000000011*T4
+	
+	// Convert to radians
+	M = M * math.Pi / 180
+	Mpr = Mpr * math.Pi / 180
+	F = F * math.Pi / 180
+	
+	// Corrections
+	C1 := (0.1734-0.000393*T)*math.Sin(M) + 0.0021*math.Sin(2*M) - 0.4068*math.Sin(Mpr) + 0.0161*math.Sin(2*Mpr)
+	C1 = C1 - 0.0004*math.Sin(3*Mpr) + 0.0104*math.Sin(2*F) - 0.0051*math.Sin(M+Mpr) - 0.0074*math.Sin(M-Mpr) + 0.0004*math.Sin(2*F+M)
+	C1 = C1 - 0.0004*math.Sin(2*F-M) - 0.0006*math.Sin(2*F+Mpr) + 0.0010*math.Sin(2*F-Mpr) + 0.0005*math.Sin(M+2*Mpr)
+	
+	deltat := 0.0
+	if T < -11 {
+		deltat = 0.001 + 0.000839*T + 0.0002261*T2 - 0.00000845*T3 - 0.000000081*T4
+	} else {
+		deltat = -0.000278 + 0.000265*T + 0.000262*T2
+	}
+	
+	JdNew := Jd1 + C1 - float64(timeZone)/24
+	
+	return math.Floor(JdNew + 0.5 + deltat)
+}
+
+// getSunLongitude tính kinh độ mặt trời
+func (lc *LunarCalendar) getSunLongitude(jdn float64, timeZone int) float64 {
+	T := (jdn - 2451545.0) / 36525 // Time in Julian centuries from J2000.0
+	T2 := T * T
+	
+	// Mean longitude
+	dr := math.Pi / 180
+	L0 := 280.46645 + 36000.76983*T + 0.0003032*T2
+	L0 = L0 * dr
+	L0 = L0 - math.Pi*2*(math.Floor(L0/(math.Pi*2)))
+	
+	// Mean anomaly
+	M := 357.52910 + 35999.05030*T - 0.0001559*T2 - 0.00000048*T*T2
+	M = M * dr
+	
+	// Equation of center
+	C := (1.914600 - 0.004817*T - 0.000014*T2)*math.Sin(M) + (0.019993-0.000101*T)*math.Sin(2*M) + 0.000290*math.Sin(3*M)
+	C = C * dr
+	
+	// True longitude
+	L := L0 + C
+	L = L - math.Pi*2*(math.Floor(L/(math.Pi*2)))
+	
+	return math.Floor(L/math.Pi*6)
+}
+
+// julianToGregorian chuyển Julian Day về Gregorian date
+func (lc *LunarCalendar) julianToGregorian(jd float64) time.Time {
+	jd = jd + 0.5
+	z := math.Floor(jd)
+	f := jd - z
+	
+	var a float64
+	if z < 2299161 {
+		a = z
+	} else {
+		alpha := math.Floor((z - 1867216.25) / 36524.25)
+		a = z + 1 + alpha - math.Floor(alpha/4)
+	}
+	
+	b := a + 1524
+	c := math.Floor((b - 122.1) / 365.25)
+	d := math.Floor(365.25 * c)
+	e := math.Floor((b - d) / 30.6001)
+	
+	day := int(b - d - math.Floor(30.6001*e) + f)
+	
+	var month int
+	if e < 14 {
+		month = int(e - 1)
+	} else {
+		month = int(e - 13)
+	}
+	
+	var year int
+	if month > 2 {
+		year = int(c - 4716)
+	} else {
+		year = int(c - 4715)
+	}
+	
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+}
+-----end internal/services/lunar_calendar.go----
+-----start internal/services/reminder_service.go----
+package services
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/google/uuid"
+)
+
+// ReminderService handles reminder business logic
+type ReminderService struct {
+	reminderRepo    repository.ReminderRepository
+	userRepo        repository.UserRepository
+	fcmService      *FCMService
+	schedCalculator *ScheduleCalculator
+}
+
+// NewReminderService creates a new reminder service
+func NewReminderService(
+	reminderRepo repository.ReminderRepository,
+	userRepo repository.UserRepository,
+	fcmService *FCMService,
+	schedCalculator *ScheduleCalculator,
+) *ReminderService {
+	return &ReminderService{
+		reminderRepo:    reminderRepo,
+		userRepo:        userRepo,
+		fcmService:      fcmService,
+		schedCalculator: schedCalculator,
+	}
+}
+
+// CreateReminder creates a new reminder
+func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.Reminder) error {
+	// Validate
+	if err := reminder.Validate(); err != nil {
+		return err
+	}
+
+	// Generate ID if not provided
+	if reminder.ID == "" {
+		reminder.ID = uuid.New().String()
+	}
+
+	// Set default values
+	if reminder.Status == "" {
+		reminder.Status = models.ReminderStatusActive
+	}
+	if reminder.RepeatStrategy == "" {
+		reminder.RepeatStrategy = models.RepeatStrategyNone
+	}
+	if reminder.CalendarType == "" {
+		reminder.CalendarType = models.CalendarTypeSolar
+	}
+
+	// Calculate next trigger time if not set
+	if reminder.NextTriggerAt.IsZero() {
+		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, time.Now())
+		if err != nil {
+			return err
+		}
+		reminder.NextTriggerAt = nextTrigger
+	}
+
+	return s.reminderRepo.Create(ctx, reminder)
+}
+
+// GetReminder retrieves a reminder by ID
+func (s *ReminderService) GetReminder(ctx context.Context, id string) (*models.Reminder, error) {
+	return s.reminderRepo.GetByID(ctx, id)
+}
+
+// UpdateReminder updates a reminder
+func (s *ReminderService) UpdateReminder(ctx context.Context, reminder *models.Reminder) error {
+	if err := reminder.Validate(); err != nil {
+		return err
+	}
+
+	return s.reminderRepo.Update(ctx, reminder)
+}
+
+// DeleteReminder deletes a reminder
+func (s *ReminderService) DeleteReminder(ctx context.Context, id string) error {
+	return s.reminderRepo.Delete(ctx, id)
+}
+
+// GetUserReminders retrieves all reminders for a user
+func (s *ReminderService) GetUserReminders(ctx context.Context, userID string) ([]*models.Reminder, error) {
+	return s.reminderRepo.GetByUserID(ctx, userID)
+}
+
+// SnoozeReminder postpones a reminder
+func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duration time.Duration) error {
+	snoozeUntil := time.Now().Add(duration)
+	return s.reminderRepo.UpdateSnooze(ctx, id, &snoozeUntil)
+}
+
+// CompleteReminder marks a reminder as completed
+func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error {
+	reminder, err := s.reminderRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+
+	// For one-time reminders, mark as completed
+	if reminder.Type == models.ReminderTypeOneTime {
+		return s.reminderRepo.MarkCompleted(ctx, id, now)
+	}
+
+	// For recurring reminders with base_on=completion
+	if reminder.RecurrencePattern != nil &&
+		reminder.RecurrencePattern.BaseOn == models.BaseOnCompletion {
+		// Calculate next trigger from completion time
+		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, now)
+		if err != nil {
+			return err
+		}
+
+		// Update last_completed_at and next_trigger_at
+		reminder.LastCompletedAt = &now
+		reminder.NextTriggerAt = nextTrigger
+		return s.reminderRepo.Update(ctx, reminder)
+	}
+
+	// For other recurring reminders, just update last_completed_at
+	reminder.LastCompletedAt = &now
+	return s.reminderRepo.Update(ctx, reminder)
+}
+
+// ProcessDueReminders processes all reminders that are due (called by worker)
+func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
+    now := time.Now()
+
+    // Get all due reminders
+    reminders, err := s.reminderRepo.GetDueReminders(ctx, now)
+    if err != nil {
+        return err
+    }
+
+    // Track if any system-level errors occurred during processing
+    systemErrorOccurred := false
+
+    for _, reminder := range reminders {
+        // Process each reminder
+        if err := s.processReminder(ctx, reminder, now); err != nil {
+            // Distinguish device token errors from system-level errors
+            if !isTokenInvalidError(err) {
+                systemErrorOccurred = true
+            }
+            // Continue with other reminders regardless
+            continue
+        }
+    }
+
+    if systemErrorOccurred {
+        return errors.New("system_fcm_error")
+    }
+    return nil
+}
+
+// processReminder processes a single reminder
+func (s *ReminderService) processReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
+    // Get user
+    user, err := s.userRepo.GetByID(ctx, reminder.UserID)
+    if err != nil {
+        return err
+    }
+
+	// Check if user has active FCM
+	if !user.IsFCMActive || user.FCMToken == "" {
+		return errors.New("user FCM not active")
+	}
+
+    // Send notification (no-op if FCM service is not configured)
+    if s.fcmService != nil {
+        err = s.fcmService.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
+        if err != nil {
+            // Handle FCM errors
+            if isTokenInvalidError(err) {
+                // Disable FCM for this user
+                s.userRepo.DisableFCM(ctx, user.ID)
+            }
+            return err
+        }
+
+        // Update last_sent_at only when we actually sent something
+        s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now)
+    }
+
+	// Handle based on type
+	if reminder.Type == models.ReminderTypeOneTime {
+		return s.handleOneTimeReminder(ctx, reminder, now)
+	} else {
+		return s.handleRecurringReminder(ctx, reminder, now)
+	}
+}
+
+// handleOneTimeReminder handles one-time reminder logic
+func (s *ReminderService) handleOneTimeReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
+	// Check if should retry
+	if reminder.RepeatStrategy == models.RepeatStrategyRetryUntilComplete && reminder.IsRetryable() {
+		// Increment retry count
+		s.reminderRepo.IncrementRetryCount(ctx, reminder.ID)
+
+		// Calculate next retry time
+		nextRetry := now.Add(time.Duration(reminder.RetryIntervalSec) * time.Second)
+		return s.reminderRepo.UpdateNextTrigger(ctx, reminder.ID, nextRetry)
+	}
+
+	// Otherwise, mark as completed
+	return s.reminderRepo.MarkCompleted(ctx, reminder.ID, now)
+}
+
+// handleRecurringReminder handles recurring reminder logic
+func (s *ReminderService) handleRecurringReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
+	// Calculate next trigger
+	nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, now)
+	if err != nil {
+		return err
+	}
+
+	// Update next trigger time
+	return s.reminderRepo.UpdateNextTrigger(ctx, reminder.ID, nextTrigger)
+}
+
+// Helper function to check if FCM error is due to invalid token
+func isTokenInvalidError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return errStr == "UNREGISTERED" ||
+		errStr == "INVALID_ARGUMENT" ||
+		errStr == "NOT_FOUND" ||
+		errStr == "user FCM not active"
+}
+-----end internal/services/reminder_service.go----
+-----start internal/worker/worker.go----
+package worker
+
+import (
+    "context"
+    "log"
+    "time"
+
+    "remiaq/internal/repository"
+)
+
+// ReminderProcessor defines the interface needed by worker
+type ReminderProcessor interface {
+    ProcessDueReminders(ctx context.Context) error
+}
+
+// Worker periodically processes due reminders when enabled in system_status.
+type Worker struct {
+    sysRepo         repository.SystemStatusRepository
+    reminderService ReminderProcessor
+    interval        time.Duration
+}
+
+// NewWorker creates a new Worker.
+func NewWorker(sysRepo repository.SystemStatusRepository, reminderService ReminderProcessor, interval time.Duration) *Worker {
+    return &Worker{
+        sysRepo:         sysRepo,
+        reminderService: reminderService,
+        interval:        interval,
+    }
+}
+
+// Start launches the background loop. It stops when ctx is cancelled.
+func (w *Worker) Start(ctx context.Context) {
+    if w == nil {
+        return
+    }
+
+    // Minimum safety interval
+    if w.interval <= 0 {
+        w.interval = time.Minute
+    }
+
+    ticker := time.NewTicker(w.interval)
+    go func() {
+        defer ticker.Stop()
+
+        log.Printf("Worker started (interval=%s)", w.interval.String())
+
+        for {
+            select {
+            case <-ticker.C:
+                w.runOnce(ctx)
+            case <-ctx.Done():
+                log.Println("Worker stopped")
+                return
+            }
+        }
+    }()
+}
+
+// runOnce performs a single worker cycle.
+func (w *Worker) runOnce(ctx context.Context) {
+    // Check if worker is enabled
+    enabled, err := w.sysRepo.IsWorkerEnabled(ctx)
+    if err != nil {
+        log.Printf("Worker: failed to check system status: %v", err)
+        return
+    }
+    if !enabled {
+        // Silently skip when disabled
+        return
+    }
+
+    // Process reminders
+    if err := w.reminderService.ProcessDueReminders(ctx); err != nil {
+        // On system-level errors, disable worker and record error
+        log.Printf("Worker: disabling due to error: %v", err)
+        _ = w.sysRepo.DisableWorker(ctx, err.Error())
+        return
+    }
+
+    // Clear previous error if any
+    _ = w.sysRepo.ClearError(ctx)
+}-----end internal/worker/worker.go----

@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RemiAq API Test Suite</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .nav-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tab.active {
+            background: white;
+            color: #495057;
+            border-bottom: 3px solid #007bff;
+        }
+
+        .nav-tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .test-section h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40,167,69,0.3);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255,193,7,0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220,53,69,0.3);
+        }
+
+        .response-area {
+            margin-top: 20px;
+            padding: 20px;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            min-height: 150px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success {
+            background: #28a745;
+        }
+
+        .status-error {
+            background: #dc3545;
+        }
+
+        .status-warning {
+            background: #ffc107;
+        }
+
+        .status-info {
+            background: #17a2b8;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .json-viewer {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+
+        .json-key {
+            color: #63b3ed;
+        }
+
+        .json-string {
+            color: #68d391;
+        }
+
+        .json-number {
+            color: #f6ad55;
+        }
+
+        .json-boolean {
+            color: #fc8181;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .nav-tabs {
+                flex-direction: column;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .tab-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔔 RemiAq API Test Suite</h1>
+            <p>Comprehensive testing interface for RemiAq reminder notification system</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('health')">Health & Status</button>
+            <button class="nav-tab" onclick="showTab('reminders')">Reminders</button>
+            <button class="nav-tab" onclick="showTab('queries')">Raw Queries</button>
+            <button class="nav-tab" onclick="showTab('advanced')">Advanced</button>
+        </div>
+
+        <!-- Health & Status Tab -->
+        <div id="health" class="tab-content active">
+            <div class="alert alert-info">
+                <strong>Health & Status APIs:</strong> Test server health, system status và worker configuration.
+            </div>
+
+            <div class="test-section">
+                <h3>🏥 Health Check</h3>
+                <button class="btn btn-primary" onclick="testHealthCheck()">
+                    <span class="status-indicator status-info"></span>
+                    Test Health Check
+                </button>
+                <div id="health-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>⚙️ System Status</h3>
+                <div class="form-row">
+                    <button class="btn btn-success" onclick="getSystemStatus()">
+                        <span class="status-indicator status-success"></span>
+                        Get System Status
+                    </button>
+                    <button class="btn btn-warning" onclick="toggleWorker()">
+                        <span class="status-indicator status-warning"></span>
+                        Toggle Worker
+                    </button>
+                </div>
+                <div id="system-response" class="response-area"></div>
+            </div>
+        </div>
+
+        <!-- Reminders Tab -->
+        <div id="reminders" class="tab-content">
+            <div class="alert alert-info">
+                <strong>Reminder APIs:</strong> Test CRUD operations, user reminders, snooze và complete actions.
+            </div>
+
+            <div class="test-section">
+                <h3>➕ Create Reminder</h3>
+                <div class="form-group">
+                    <label>User ID:</label>
+                    <input type="text" id="create-user-id" class="form-control" value="user-123" placeholder="Enter user ID">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Title:</label>
+                        <input type="text" id="create-title" class="form-control" value="Test Reminder" placeholder="Reminder title">
+                    </div>
+                    <div class="form-group">
+                        <label>Type:</label>
+                        <select id="create-type" class="form-control">
+                            <option value="one_time">One Time</option>
+                            <option value="recurring">Recurring</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Calendar Type:</label>
+                        <select id="create-calendar-type" class="form-control">
+                            <option value="solar">Solar</option>
+                            <option value="lunar">Lunar</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Trigger Time:</label>
+                        <input type="datetime-local" id="create-trigger-time" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description:</label>
+                    <textarea id="create-description" class="form-control" rows="3" placeholder="Reminder description">Test reminder created from web interface</textarea>
+                </div>
+                <button class="btn btn-primary" onclick="createReminder()">
+                    <span class="status-indicator status-success"></span>
+                    Create Reminder
+                </button>
+                <div id="create-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🔍 Get & Manage Reminders</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Reminder ID:</label>
+                        <input type="text" id="reminder-id" class="form-control" placeholder="Enter reminder ID">
+                    </div>
+                    <div class="form-group">
+                        <label>User ID (for user reminders):</label>
+                        <input type="text" id="user-reminders-id" class="form-control" value="user-123" placeholder="Enter user ID">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <button class="btn btn-success" onclick="getReminder()">Get Reminder</button>
+                    <button class="btn btn-primary" onclick="getUserReminders()">Get User Reminders</button>
+                    <button class="btn btn-warning" onclick="snoozeReminder()">Snooze (1h)</button>
+                    <button class="btn btn-danger" onclick="completeReminder()">Complete</button>
+                </div>
+                <div id="manage-response" class="response-area"></div>
+            </div>
+        </div>
+
+        <!-- Raw Queries Tab -->
+        <div id="queries" class="tab-content">
+            <div class="alert alert-info">
+                <strong>Raw SQL APIs:</strong> Test direct database operations với raw SQL queries.
+            </div>
+
+            <div class="test-section">
+                <h3>📊 Raw SQL Query</h3>
+                <div class="form-group">
+                    <label>SQL Query:</label>
+                    <textarea id="sql-query" class="form-control" rows="4" placeholder="SELECT * FROM reminders LIMIT 5;">SELECT * FROM reminders LIMIT 5;</textarea>
+                </div>
+                <button class="btn btn-primary" onclick="executeQuery()">
+                    <span class="status-indicator status-info"></span>
+                    Execute Query
+                </button>
+                <div id="query-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>📝 Raw SQL Insert</h3>
+                <div class="form-group">
+                    <label>Insert Statement:</label>
+                    <textarea id="sql-insert" class="form-control" rows="4" placeholder="INSERT INTO users (id, email, fcm_token) VALUES (...)">INSERT INTO users (id, email, fcm_token, is_fcm_active, created, updated) 
+VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, datetime('now'), datetime('now'));</textarea>
+                </div>
+                <button class="btn btn-success" onclick="executeInsert()">
+                    <span class="status-indicator status-success"></span>
+                    Execute Insert
+                </button>
+                <div id="insert-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>✏️ Raw SQL Update</h3>
+                <div class="form-group">
+                    <label>Update Statement:</label>
+                    <textarea id="sql-update" class="form-control" rows="4" placeholder="UPDATE reminders SET status = 'completed' WHERE ...">UPDATE system_status SET worker_enabled = NOT worker_enabled, updated = datetime('now') WHERE mid = 1;</textarea>
+                </div>
+                <button class="btn btn-warning" onclick="executeUpdate()">
+                    <span class="status-indicator status-warning"></span>
+                    Execute Update
+                </button>
+                <div id="update-response" class="response-area"></div>
+            </div>
+        </div>
+
+        <!-- Advanced Tab -->
+        <div id="advanced" class="tab-content">
+            <div class="alert alert-info">
+                <strong>Advanced Features:</strong> Test lunar calendar, schedule calculator và batch operations.
+            </div>
+
+            <div class="test-section">
+                <h3>🌙 Lunar Calendar Test</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Solar Date:</label>
+                        <input type="date" id="solar-date" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Lunar Date (DD/MM):</label>
+                        <input type="text" id="lunar-date" class="form-control" placeholder="15/08" value="15/08">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="testLunarCalendar()">
+                    <span class="status-indicator status-info"></span>
+                    Test Lunar Conversion
+                </button>
+                <div id="lunar-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>📅 Schedule Calculator Test</h3>
+                <div class="form-group">
+                    <label>Recurrence Pattern (JSON):</label>
+                    <textarea id="recurrence-pattern" class="form-control" rows="6" placeholder="Enter recurrence pattern JSON">{
+  "type": "monthly",
+  "day_of_month": 15,
+  "base_on": "creation"
+}</textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Calendar Type:</label>
+                        <select id="schedule-calendar-type" class="form-control">
+                            <option value="solar">Solar</option>
+                            <option value="lunar">Lunar</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Base Time:</label>
+                        <input type="datetime-local" id="schedule-base-time" class="form-control">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="testScheduleCalculator()">
+                    <span class="status-indicator status-success"></span>
+                    Calculate Next Trigger
+                </button>
+                <div id="schedule-response" class="response-area"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🔄 Batch Operations</h3>
+                <button class="btn btn-warning" onclick="processAllDueReminders()">
+                    <span class="status-indicator status-warning"></span>
+                    Process Due Reminders
+                </button>
+                <button class="btn btn-primary" onclick="getAllUsers()">
+                    <span class="status-indicator status-info"></span>
+                    Get All Users
+                </button>
+                <button class="btn btn-success" onclick="getSystemStats()">
+                    <span class="status-indicator status-success"></span>
+                    Get System Stats
+                </button>
+                <div id="batch-response" class="response-area"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Base API URL - adjust if needed
+        const API_BASE = window.location.origin;
+        
+        // Set default datetime to 1 hour from now
+        document.addEventListener('DOMContentLoaded', function() {
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            const isoString = now.toISOString().slice(0, 16);
+            document.getElementById('create-trigger-time').value = isoString;
+            document.getElementById('schedule-base-time').value = isoString;
+            document.getElementById('solar-date').value = now.toISOString().slice(0, 10);
+        });
+
+        // Tab switching
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Utility functions
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = '<div class="loading"></div>Loading...';
+        }
+
+        function showResponse(elementId, response, isError = false) {
+            const element = document.getElementById(elementId);
+            const statusClass = isError ? 'status-error' : 'status-success';
+            const timestamp = new Date().toLocaleTimeString();
+            
+            let formattedResponse;
+            if (typeof response === 'object') {
+                formattedResponse = JSON.stringify(response, null, 2);
+            } else {
+                formattedResponse = response;
+            }
+            
+            element.innerHTML = `
+                <div style="margin-bottom: 10px;">
+                    <span class="status-indicator ${statusClass}"></span>
+                    <strong>${isError ? 'Error' : 'Success'}</strong> - ${timestamp}
+                </div>
+                <div class="json-viewer">${formattedResponse}</div>
+            `;
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.text();
+                let jsonData;
+                try {
+                    jsonData = JSON.parse(data);
+                } catch {
+                    jsonData = data;
+                }
+                
+                return {
+                    ok: response.ok,
+                    status: response.status,
+                    data: jsonData
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    status: 0,
+                    data: error.message
+                };
+            }
+        }
+
+        // Health & Status Functions
+        async function testHealthCheck() {
+            showLoading('health-response');
+            const result = await makeRequest(`${API_BASE}/hello`);
+            showResponse('health-response', result, !result.ok);
+        }
+
+        async function getSystemStatus() {
+            showLoading('system-response');
+            const result = await makeRequest(`${API_BASE}/api/system_status`);
+            showResponse('system-response', result, !result.ok);
+        }
+
+        async function toggleWorker() {
+            showLoading('system-response');
+            
+            // First get current status
+            const getResult = await makeRequest(`${API_BASE}/api/system_status`);
+            if (!getResult.ok) {
+                showResponse('system-response', getResult, true);
+                return;
+            }
+            
+            // Toggle worker_enabled
+            const currentStatus = getResult.data.data || getResult.data;
+            const newStatus = {
+                ...currentStatus,
+                worker_enabled: !currentStatus.worker_enabled,
+                updated: new Date().toISOString()
+            };
+            
+            const result = await makeRequest(`${API_BASE}/api/system_status`, {
+                method: 'PUT',
+                body: JSON.stringify(newStatus)
+            });
+            
+            showResponse('system-response', result, !result.ok);
+        }
+
+        // Reminder Functions
+        async function createReminder() {
+            showLoading('create-response');
+            
+            const reminderData = {
+                user_id: document.getElementById('create-user-id').value,
+                title: document.getElementById('create-title').value,
+                description: document.getElementById('create-description').value,
+                type: document.getElementById('create-type').value,
+                calendar_type: document.getElementById('create-calendar-type').value,
+                next_trigger_at: new Date(document.getElementById('create-trigger-time').value).toISOString(),
+                status: 'active'
+            };
+            
+            const result = await makeRequest(`${API_BASE}/api/reminders`, {
+                method: 'POST',
+                body: JSON.stringify(reminderData)
+            });
+            
+            showResponse('create-response', result, !result.ok);
+            
+            // Auto-fill reminder ID if successful
+            if (result.ok && result.data.data && result.data.data.id) {
+                document.getElementById('reminder-id').value = result.data.data.id;
+            }
+        }
+
+        async function getReminder() {
+            const id = document.getElementById('reminder-id').value;
+            if (!id) {
+                showResponse('manage-response', 'Please enter a reminder ID', true);
+                return;
+            }
+            
+            showLoading('manage-response');
+            const result = await makeRequest(`${API_BASE}/api/reminders/${id}`);
+            showResponse('manage-response', result, !result.ok);
+        }
+
+        async function getUserReminders() {
+            const userId = document.getElementById('user-reminders-id').value;
+            if (!userId) {
+                showResponse('manage-response', 'Please enter a user ID', true);
+                return;
+            }
+            
+            showLoading('manage-response');
+            const result = await makeRequest(`${API_BASE}/api/users/${userId}/reminders`);
+            showResponse('manage-response', result, !result.ok);
+        }
+
+        async function snoozeReminder() {
+            const id = document.getElementById('reminder-id').value;
+            if (!id) {
+                showResponse('manage-response', 'Please enter a reminder ID', true);
+                return;
+            }
+            
+            showLoading('manage-response');
+            const result = await makeRequest(`${API_BASE}/api/reminders/${id}/snooze`, {
+                method: 'POST',
+                body: JSON.stringify({ duration_minutes: 60 })
+            });
+            showResponse('manage-response', result, !result.ok);
+        }
+
+        async function completeReminder() {
+            const id = document.getElementById('reminder-id').value;
+            if (!id) {
+                showResponse('manage-response', 'Please enter a reminder ID', true);
+                return;
+            }
+            
+            showLoading('manage-response');
+            const result = await makeRequest(`${API_BASE}/api/reminders/${id}/complete`, {
+                method: 'POST'
+            });
+            showResponse('manage-response', result, !result.ok);
+        }
+
+        // Raw Query Functions
+        async function executeQuery() {
+            const query = document.getElementById('sql-query').value;
+            if (!query.trim()) {
+                showResponse('query-response', 'Please enter a SQL query', true);
+                return;
+            }
+            
+            showLoading('query-response');
+            const result = await makeRequest(`${API_BASE}/api/rquery`, {
+                method: 'POST',
+                body: JSON.stringify({ query: query })
+            });
+            showResponse('query-response', result, !result.ok);
+        }
+
+        async function executeInsert() {
+            const query = document.getElementById('sql-insert').value;
+            if (!query.trim()) {
+                showResponse('insert-response', 'Please enter an INSERT statement', true);
+                return;
+            }
+            
+            showLoading('insert-response');
+            const result = await makeRequest(`${API_BASE}/api/rinsert`, {
+                method: 'POST',
+                body: JSON.stringify({ query: query })
+            });
+            showResponse('insert-response', result, !result.ok);
+        }
+
+        async function executeUpdate() {
+            const query = document.getElementById('sql-update').value;
+            if (!query.trim()) {
+                showResponse('update-response', 'Please enter an UPDATE statement', true);
+                return;
+            }
+            
+            showLoading('update-response');
+            const result = await makeRequest(`${API_BASE}/api/rupdate`, {
+                method: 'PUT',
+                body: JSON.stringify({ query: query })
+            });
+            showResponse('update-response', result, !result.ok);
+        }
+
+        // Advanced Functions
+        async function testLunarCalendar() {
+            showLoading('lunar-response');
+            
+            const solarDate = document.getElementById('solar-date').value;
+            const lunarDate = document.getElementById('lunar-date').value;
+            
+            // This is a mock implementation since we don't have direct lunar API
+            // In real implementation, you would call your lunar calendar service
+            const mockResult = {
+                solar_date: solarDate,
+                lunar_date: lunarDate,
+                lunar_year: 2024,
+                lunar_month: 8,
+                lunar_day: 15,
+                zodiac_year: "Giáp Thìn",
+                zodiac_day: "Đinh Mão",
+                note: "This is a mock response. Implement actual lunar calendar API."
+            };
+            
+            showResponse('lunar-response', mockResult);
+        }
+
+        async function testScheduleCalculator() {
+            showLoading('schedule-response');
+            
+            try {
+                const pattern = JSON.parse(document.getElementById('recurrence-pattern').value);
+                const calendarType = document.getElementById('schedule-calendar-type').value;
+                const baseTime = document.getElementById('schedule-base-time').value;
+                
+                // Mock schedule calculation
+                const mockResult = {
+                    recurrence_pattern: pattern,
+                    calendar_type: calendarType,
+                    base_time: baseTime,
+                    next_trigger: new Date(new Date(baseTime).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    note: "This is a mock response. Implement actual schedule calculator API."
+                };
+                
+                showResponse('schedule-response', mockResult);
+            } catch (error) {
+                showResponse('schedule-response', `Invalid JSON: ${error.message}`, true);
+            }
+        }
+
+        async function processAllDueReminders() {
+            showLoading('batch-response');
+            
+            // Mock batch processing
+            const mockResult = {
+                processed_count: 5,
+                successful_count: 4,
+                failed_count: 1,
+                errors: ["FCM token invalid for user-456"],
+                note: "This is a mock response. Implement actual batch processing API."
+            };
+            
+            showResponse('batch-response', mockResult);
+        }
+
+        async function getAllUsers() {
+            showLoading('batch-response');
+            const result = await makeRequest(`${API_BASE}/api/rquery`, {
+                method: 'POST',
+                body: JSON.stringify({ query: "SELECT id, email, is_fcm_active, created FROM users LIMIT 10;" })
+            });
+            showResponse('batch-response', result, !result.ok);
+        }
+
+        async function getSystemStats() {
+            showLoading('batch-response');
+            const result = await makeRequest(`${API_BASE}/api/rquery`, {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    query: `
+                        SELECT 
+                            'Total Reminders' as metric, COUNT(*) as value FROM reminders
+                        UNION ALL
+                        SELECT 
+                            'Active Reminders' as metric, COUNT(*) as value FROM reminders WHERE status = 'active'
+                        UNION ALL
+                        SELECT 
+                            'Total Users' as metric, COUNT(*) as value FROM users
+                        UNION ALL
+                        SELECT 
+                            'Active FCM Users' as metric, COUNT(*) as value FROM users WHERE is_fcm_active = 1;
+                    `
+                })
+            });
+            showResponse('batch-response', result, !result.ok);
+        }
+    </script>
+</body>
+</html>

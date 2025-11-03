@@ -237,5 +237,6 @@ func isTokenInvalidError(err error) bool {
 	errStr := err.Error()
 	return errStr == "UNREGISTERED" ||
 		errStr == "INVALID_ARGUMENT" ||
-		errStr == "NOT_FOUND"
+		errStr == "NOT_FOUND" ||
+		errStr == "user FCM not active"
 }

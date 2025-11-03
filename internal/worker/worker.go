@@ -6,18 +6,22 @@ import (
     "time"
 
     "remiaq/internal/repository"
-    "remiaq/internal/services"
 )
+
+// ReminderProcessor defines the interface needed by worker
+type ReminderProcessor interface {
+    ProcessDueReminders(ctx context.Context) error
+}
 
 // Worker periodically processes due reminders when enabled in system_status.
 type Worker struct {
     sysRepo         repository.SystemStatusRepository
-    reminderService *services.ReminderService
+    reminderService ReminderProcessor
     interval        time.Duration
 }
 
 // NewWorker creates a new Worker.
-func NewWorker(sysRepo repository.SystemStatusRepository, reminderService *services.ReminderService, interval time.Duration) *Worker {
+func NewWorker(sysRepo repository.SystemStatusRepository, reminderService ReminderProcessor, interval time.Duration) *Worker {
     return &Worker{
         sysRepo:         sysRepo,
         reminderService: reminderService,

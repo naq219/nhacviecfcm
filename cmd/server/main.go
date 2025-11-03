@@ -19,7 +19,10 @@ import (
 
 func main() {
 	// Load configuration
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
 	// Set PocketBase server address
 	os.Setenv("PB_ADDR", cfg.ServerAddr)
@@ -105,7 +108,7 @@ func main() {
 		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
 		se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
 
-		// Simple HTML test page
+		// HTML test pages
 		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
 			// Đọc file HTML tĩnh
@@ -115,6 +118,22 @@ func main() {
 			}
 			re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 			return re.String(200, string(content))
+		})
+
+		// Comprehensive RemiAq test page
+		se.Router.GET("/test", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			content, err := os.ReadFile("web/remiaq_test.html")
+			if err != nil {
+				return re.String(404, "RemiAq test page not found")
+			}
+			re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return re.String(200, string(content))
+		})
+
+		se.Router.GET("/", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			return re.Redirect(302, "/test")
 		})
 
 		return se.Next()

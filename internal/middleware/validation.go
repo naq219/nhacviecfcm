@@ -13,7 +13,7 @@ var (
 		`(?i)\bTRUNCATE\b`,
 		`(?i)\bALTER\b`,
 		`(?i)\bCREATE\b`,
-		`(?i)\b--\b`,
+		`(?i)--`,
 		`(?i)/\*`,
 		`(?i)\*/`,
 		`(?i)\bEXEC\b`,

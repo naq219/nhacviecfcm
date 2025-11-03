@@ -1,24 +1,36 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	"remiaq/internal/middleware"
 	"remiaq/internal/models"
-	"remiaq/internal/services"
 	"remiaq/internal/utils"
 
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// ReminderServiceInterface defines the interface for reminder service
+type ReminderServiceInterface interface {
+	CreateReminder(ctx context.Context, reminder *models.Reminder) error
+	GetReminder(ctx context.Context, id string) (*models.Reminder, error)
+	UpdateReminder(ctx context.Context, reminder *models.Reminder) error
+	DeleteReminder(ctx context.Context, id string) error
+	GetUserReminders(ctx context.Context, userID string) ([]*models.Reminder, error)
+	SnoozeReminder(ctx context.Context, id string, duration time.Duration) error
+	CompleteReminder(ctx context.Context, id string) error
+	ProcessDueReminders(ctx context.Context) error
+}
+
 // ReminderHandler handles reminder HTTP requests
 type ReminderHandler struct {
-	reminderService *services.ReminderService
+	reminderService ReminderServiceInterface
 }
 
 // NewReminderHandler creates a new reminder handler
-func NewReminderHandler(reminderService *services.ReminderService) *ReminderHandler {
+func NewReminderHandler(reminderService ReminderServiceInterface) *ReminderHandler {
 	return &ReminderHandler{
 		reminderService: reminderService,
 	}
