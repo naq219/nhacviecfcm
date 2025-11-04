@@ -120,7 +120,8 @@ func init() {
 			Name: "snooze_until",
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name: "last_completed_at",
+			Name:     "last_completed_at",
+			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.DateField{
 			Name: "last_sent_at",
