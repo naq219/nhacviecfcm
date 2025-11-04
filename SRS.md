@@ -166,6 +166,24 @@ Xây dựng ứng dụng nhắc nhở cho phép:
 
 ---
 
+## 9. API truy vấn SQL thô (Legacy)
+
+Để đảm bảo tương thích ngược với các hệ thống cũ, ứng dụng cung cấp các endpoint cho phép thực thi các câu lệnh SQL thô. Các endpoint này được bảo vệ bởi các quy tắc validation nghiêm ngặt để ngăn chặn các truy vấn nguy hiểm.
+
+- **GET/POST `/api/rquery`**: Thực thi các câu lệnh `SELECT`.
+- **GET/POST `/api/rinsert`**: Thực thi các câu lệnh `INSERT`.
+- **GET/PUT `/api/rupdate`**: Thực thi các câu lệnh `UPDATE`.
+- **GET/DELETE `/api/rdelete`**: Thực thi các câu lệnh `DELETE`.
+
+### Luồng xử lý:
+1.  Client gửi request chứa câu lệnh SQL trong body (POST/PUT/DELETE) hoặc query parameter `q` (GET).
+2.  Middleware xác thực câu lệnh dựa trên loại (ví dụ: chỉ cho phép `SELECT` ở endpoint `rquery`).
+3.  Nếu hợp lệ, `QueryRepository` sẽ thực thi câu lệnh và trả về kết quả.
+
+> ⚠️ **Cảnh báo**: Các endpoint này chỉ nên được sử dụng khi thực sự cần thiết và bởi các client được tin tưởng.
+
+---
+
 ✅ Tài liệu này phản ánh **đúng thiết kế hiện tại** của bạn: **đơn giản, đủ mạnh, dễ triển khai**.
 
 Chúc bạn code vui và hệ thống chạy mượt! 🚀
