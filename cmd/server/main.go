@@ -15,7 +15,7 @@ import (
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
 	"remiaq/internal/worker"
-	
+
 	// Import migrations package để PocketBase load migrations
 	_ "remiaq/migrations"
 )

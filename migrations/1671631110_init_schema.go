@@ -35,6 +35,15 @@ func init() {
 			Name:     "is_fcm_active",
 			Required: false,
 		})
+		musersCollection.Fields.Add(&core.AutodateField{
+			Name:     "created",
+			OnCreate: true,
+		})
+		musersCollection.Fields.Add(&core.AutodateField{
+			Name:     "updated",
+			OnCreate: true,
+			OnUpdate: true,
+		})
 
 		if err := app.Save(musersCollection); err != nil {
 			return err
@@ -108,21 +117,41 @@ func init() {
 			Values:    []string{"active", "completed", "paused"},
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name:     "snooze_until",
-			Required: false,
+			Name: "snooze_until",
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name:     "last_completed_at",
-			Required: false,
+			Name: "last_completed_at",
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name:     "last_sent_at",
-			Required: false,
+			Name: "last_sent_at",
+		})
+		remindersCollection.Fields.Add(&core.AutodateField{
+			Name:     "created",
+			OnCreate: true,
+		})
+		remindersCollection.Fields.Add(&core.AutodateField{
+			Name:     "updated",
+			OnCreate: true,
+			OnUpdate: true,
 		})
 
 		if err := app.Save(remindersCollection); err != nil {
 			return err
 		}
+
+		// Add optional DateFields sau khi tạo collection để tránh bug Pocketbase
+		// alterQueries := []string{
+		// 	`ALTER TABLE reminders ADD COLUMN last_completed_at TEXT DEFAULT NULL`,
+		// 	`ALTER TABLE reminders ADD COLUMN last_sent_at TEXT DEFAULT NULL`,
+		// 	`ALTER TABLE reminders ADD COLUMN snooze_until TEXT DEFAULT NULL`,
+		// }
+
+		// for _, query := range alterQueries {
+		// 	q := app.DB().NewQuery(query)
+		// 	if _, err := q.Execute(); err != nil {
+		// 		return fmt.Errorf("failed to add optional date fields: %w", err)
+		// 	}
+		// }
 
 		// Create system_status collection
 		systemStatusCollection := core.NewBaseCollection("system_status")
@@ -139,9 +168,14 @@ func init() {
 			Name:     "last_error",
 			Required: false,
 		})
-		systemStatusCollection.Fields.Add(&core.DateField{
+		systemStatusCollection.Fields.Add(&core.AutodateField{
+			Name:     "created",
+			OnCreate: true,
+		})
+		systemStatusCollection.Fields.Add(&core.AutodateField{
 			Name:     "updated",
-			Required: true,
+			OnCreate: true,
+			OnUpdate: true,
 		})
 
 		if err := app.Save(systemStatusCollection); err != nil {
