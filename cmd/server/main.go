@@ -8,6 +8,7 @@ import (
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/apis"
 
 	"remiaq/config"
 	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
@@ -99,6 +100,17 @@ func main() {
 		se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
 		se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
 		se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
+
+		// Auth-protected endpoints (PocketBase built-in auth)
+		secure := se.Router.Group("/api/secure")
+		secure.Bind(apis.RequireAuth())
+		secure.POST("/reminders", reminderHandler.CreateReminder)
+		secure.GET("/reminders/{id}", reminderHandler.GetReminder)
+		secure.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
+		secure.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
+		secure.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		secure.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		secure.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
 		// User reminders
 		se.Router.GET("/api/users/{userId}/reminders", reminderHandler.GetUserReminders)
