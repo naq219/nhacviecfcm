@@ -135,63 +135,63 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 
 // ProcessDueReminders processes all reminders that are due (called by worker)
 func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
-    now := time.Now()
+	now := time.Now()
 
-    // Get all due reminders
-    reminders, err := s.reminderRepo.GetDueReminders(ctx, now)
-    if err != nil {
-        return err
-    }
+	// Get all due reminders
+	reminders, err := s.reminderRepo.GetDueReminders(ctx, now)
+	if err != nil {
+		return err
+	}
 
-    // Track if any system-level errors occurred during processing
-    systemErrorOccurred := false
+	// Track if any system-level errors occurred during processing
+	systemErrorOccurred := false
 
-    for _, reminder := range reminders {
-        // Process each reminder
-        if err := s.processReminder(ctx, reminder, now); err != nil {
-            // Distinguish device token errors from system-level errors
-            if !isTokenInvalidError(err) {
-                systemErrorOccurred = true
-            }
-            // Continue with other reminders regardless
-            continue
-        }
-    }
+	for _, reminder := range reminders {
+		// Process each reminder
+		if err := s.processReminder(ctx, reminder, now); err != nil {
+			// Distinguish device token errors from system-level errors
+			if !isTokenInvalidError(err) {
+				systemErrorOccurred = true
+			}
+			// Continue with other reminders regardless
+			continue
+		}
+	}
 
-    if systemErrorOccurred {
-        return errors.New("system_fcm_error")
-    }
-    return nil
+	if systemErrorOccurred {
+		return errors.New("system_fcm_error")
+	}
+	return nil
 }
 
 // processReminder processes a single reminder
 func (s *ReminderService) processReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-    // Get user
-    user, err := s.userRepo.GetByID(ctx, reminder.UserID)
-    if err != nil {
-        return err
-    }
+	// Get user
+	user, err := s.userRepo.GetByID(ctx, reminder.UserID)
+	if err != nil {
+		return err
+	}
 
 	// Check if user has active FCM
 	if !user.IsFCMActive || user.FCMToken == "" {
 		return errors.New("user FCM not active")
 	}
 
-    // Send notification (no-op if FCM service is not configured)
-    if s.fcmService != nil {
-        err = s.fcmService.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
-        if err != nil {
-            // Handle FCM errors
-            if isTokenInvalidError(err) {
-                // Disable FCM for this user
-                s.userRepo.DisableFCM(ctx, user.ID)
-            }
-            return err
-        }
+	// Send notification (no-op if FCM service is not configured)
+	if s.fcmService != nil {
+		err = s.fcmService.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
+		if err != nil {
+			// Handle FCM errors
+			if isTokenInvalidError(err) {
+				// Disable FCM for this user
+				s.userRepo.DisableFCM(ctx, user.ID)
+			}
+			return err
+		}
 
-        // Update last_sent_at only when we actually sent something
-        s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now)
-    }
+		// Update last_sent_at only when we actually sent something
+		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now)
+	}
 
 	// Handle based on type
 	if reminder.Type == models.ReminderTypeOneTime {

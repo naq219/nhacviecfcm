@@ -166,8 +166,8 @@ func parseTime(value string) (time.Time, error) {
 		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02T15:04:05Z",
-		"2006-01-02 15:04:05.999Z",    // PocketBase DateTime format with milliseconds
-		"2006-01-02 15:04:05.000Z",    // PocketBase DateTime format
+		"2006-01-02 15:04:05.999Z", // PocketBase DateTime format with milliseconds
+		"2006-01-02 15:04:05.000Z", // PocketBase DateTime format
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04:05.9999999 -0700 MST", // Go time.String() format (PocketBase default)
 	}

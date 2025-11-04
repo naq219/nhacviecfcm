@@ -47,7 +47,7 @@ func NewLunarCalendar() *LunarCalendar {
 func (lc *LunarCalendar) SolarToLunar(solar time.Time) LunarDate {
 	// Chuyển về múi giờ Việt Nam
 	vietnamTime := solar.In(time.FixedZone("ICT", 7*3600))
-	
+
 	// Sử dụng hàm ConvertSolar2Lunar từ lunar_date.go
 	lunarDay, lunarMonth, lunarYear, lunarLeap := ConvertSolar2Lunar(
 		vietnamTime.Day(),
@@ -55,7 +55,7 @@ func (lc *LunarCalendar) SolarToLunar(solar time.Time) LunarDate {
 		vietnamTime.Year(),
 		lc.timeZone,
 	)
-	
+
 	return LunarDate{
 		Year:     lunarYear,
 		Month:    lunarMonth,
@@ -76,16 +76,16 @@ func (lc *LunarCalendar) LunarToSolarWithLeap(year, month, day int, isLeap bool)
 	if isLeap {
 		lunarLeap = 1
 	}
-	
+
 	// Sử dụng hàm ConvertLunar2Solar từ lunar_date.go
 	solarDay, solarMonth, solarYear := ConvertLunar2Solar(day, month, year, lunarLeap, lc.timeZone)
-	
+
 	// Kiểm tra ngày hợp lệ
 	if solarDay == 0 && solarMonth == 0 && solarYear == 0 {
 		// Ngày không hợp lệ, trả về zero time
 		return time.Time{}
 	}
-	
+
 	return time.Date(solarYear, time.Month(solarMonth), solarDay, 0, 0, 0, 0, time.UTC)
 }
 
@@ -93,7 +93,7 @@ func (lc *LunarCalendar) LunarToSolarWithLeap(year, month, day int, isLeap bool)
 func (lc *LunarCalendar) GetLunarMonthDays(year, month int) int {
 	// Tính ngày đầu tháng và tháng sau
 	firstDay := lc.LunarToSolar(year, month, 1)
-	
+
 	// Tính tháng sau
 	nextMonth := month + 1
 	nextYear := year
@@ -101,9 +101,9 @@ func (lc *LunarCalendar) GetLunarMonthDays(year, month int) int {
 		nextMonth = 1
 		nextYear++
 	}
-	
+
 	nextFirstDay := lc.LunarToSolar(nextYear, nextMonth, 1)
-	
+
 	// Tính số ngày
 	duration := nextFirstDay.Sub(firstDay)
 	return int(duration.Hours() / 24)

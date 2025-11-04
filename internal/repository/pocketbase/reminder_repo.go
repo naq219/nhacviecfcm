@@ -44,24 +44,24 @@ func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) er
     `
 
 	return r.helper.Exec(query, dbx.Params{
-		"id":                reminder.ID,
-		"user_id":           reminder.UserID,
-		"title":             reminder.Title,
-		"description":       reminder.Description,
-		"type":              reminder.Type,
-		"calendar_type":     reminder.CalendarType,
-		"next_trigger_at":   reminder.NextTriggerAt,
+		"id":                  reminder.ID,
+		"user_id":             reminder.UserID,
+		"title":               reminder.Title,
+		"description":         reminder.Description,
+		"type":                reminder.Type,
+		"calendar_type":       reminder.CalendarType,
+		"next_trigger_at":     reminder.NextTriggerAt,
 		"trigger_time_of_day": reminder.TriggerTimeOfDay,
-		"recurrence_pattern": string(patternJSON),
-		"repeat_strategy":    reminder.RepeatStrategy,
-		"retry_interval_sec": reminder.RetryIntervalSec,
-		"max_retries":       reminder.MaxRetries,
-		"status":            reminder.Status,
-		"snooze_until":      reminder.SnoozeUntil,
-		"last_completed_at": reminder.LastCompletedAt,
-		"last_sent_at":      reminder.LastSentAt,
-		"created":           reminder.Created,
-		"updated":           reminder.Updated,
+		"recurrence_pattern":  string(patternJSON),
+		"repeat_strategy":     reminder.RepeatStrategy,
+		"retry_interval_sec":  reminder.RetryIntervalSec,
+		"max_retries":         reminder.MaxRetries,
+		"status":              reminder.Status,
+		"snooze_until":        reminder.SnoozeUntil,
+		"last_completed_at":   reminder.LastCompletedAt,
+		"last_sent_at":        reminder.LastSentAt,
+		"created":             reminder.Created,
+		"updated":             reminder.Updated,
 	})
 }
 
@@ -106,23 +106,23 @@ func (r *ReminderRepo) Update(ctx context.Context, reminder *models.Reminder) er
     `
 
 	return r.helper.Exec(query, dbx.Params{
-		"user_id":           reminder.UserID,
-		"title":             reminder.Title,
-		"description":       reminder.Description,
-		"type":              reminder.Type,
-		"calendar_type":     reminder.CalendarType,
-		"next_trigger_at":   reminder.NextTriggerAt,
+		"user_id":             reminder.UserID,
+		"title":               reminder.Title,
+		"description":         reminder.Description,
+		"type":                reminder.Type,
+		"calendar_type":       reminder.CalendarType,
+		"next_trigger_at":     reminder.NextTriggerAt,
 		"trigger_time_of_day": reminder.TriggerTimeOfDay,
-		"recurrence_pattern": string(patternJSON),
-		"repeat_strategy":    reminder.RepeatStrategy,
-		"retry_interval_sec": reminder.RetryIntervalSec,
-		"max_retries":       reminder.MaxRetries,
-		"status":            reminder.Status,
-		"snooze_until":      reminder.SnoozeUntil,
-		"last_completed_at": reminder.LastCompletedAt,
-		"last_sent_at":      reminder.LastSentAt,
-		"updated":           time.Now(),
-		"id":                reminder.ID,
+		"recurrence_pattern":  string(patternJSON),
+		"repeat_strategy":     reminder.RepeatStrategy,
+		"retry_interval_sec":  reminder.RetryIntervalSec,
+		"max_retries":         reminder.MaxRetries,
+		"status":              reminder.Status,
+		"snooze_until":        reminder.SnoozeUntil,
+		"last_completed_at":   reminder.LastCompletedAt,
+		"last_sent_at":        reminder.LastSentAt,
+		"updated":             time.Now(),
+		"id":                  reminder.ID,
 	})
 }
 
@@ -138,7 +138,7 @@ func (r *ReminderRepo) GetDueReminders(ctx context.Context, beforeTime time.Time
           AND status = 'active'
           AND (snooze_until IS NULL OR snooze_until <= {:before_time})
     `
-	
+
 	reminders, err := db.GetAll[models.Reminder](r.helper, query,
 		dbx.Params{"before_time": beforeTime})
 	if err != nil {

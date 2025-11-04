@@ -7,19 +7,46 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/core"
 
 	"remiaq/config"
-	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
+	"remiaq/internal/handlers"
 	"remiaq/internal/middleware"
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
 	"remiaq/internal/worker"
 
+	// Swagger docs
+	_ "remiaq/docs"
+
 	// Import migrations package để PocketBase load migrations
 	_ "remiaq/migrations"
 )
+
+//	@title			RemiAq API
+//	@version		1.0
+//	@description	RemiAq - Reminder & Lunar Calendar API
+//	@termsOfService	http://swagger.io/terms/
+
+//	@contact.name	API Support
+//	@contact.url	http://www.swagger.io/support
+//	@contact.email	support@swagger.io
+
+//	@license.name	Apache 2.0
+//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+
+//	@host		localhost:8090
+//	@basePath	/
+//	@schemes	http https
+
+//	@securityDefinitions.basic	BasicAuth
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+
+//	@externalDocs.description	OpenAPI
+//	@externalDocs.url			https://swagger.io/resources/open-api/
 
 func main() {
 	// Load configuration
@@ -40,13 +67,11 @@ func main() {
 	queryRepo := pbRepo.NewQueryRepo(app)
 
 	// Initialize services
-	// Note: FCM service is optional, we'll initialize it with a stub for now
 	var fcmService *services.FCMService
 	if _, err := os.Stat(cfg.FCMCredentials); err == nil {
 		fcmService, err = services.NewFCMService(cfg.FCMCredentials)
 		if err != nil {
 			log.Printf("Warning: Failed to initialize FCM service: %v", err)
-			// Continue without FCM for development
 		}
 	} else {
 		log.Println("Warning: FCM credentials not found, notifications disabled")
@@ -77,12 +102,18 @@ func main() {
 		})
 
 		// Health check
+		//	@Summary		Health check
+		//	@Description	Kiểm tra server có chạy hay không
+		//	@Tags			system
+		//	@Produce		plain
+		//	@Success		200	{string}	string	"RemiAq API is running!"
+		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
 			return re.String(200, "RemiAq API is running!")
 		})
 
-		// Raw SQL query endpoints (from original main.go)
+		// Raw SQL query endpoints
 		se.Router.GET("/api/rquery", queryHandler.HandleSelect)
 		se.Router.POST("/api/rquery", queryHandler.HandleSelect)
 
@@ -95,29 +126,28 @@ func main() {
 		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
 		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
 
-		// Reminder CRUD endpoints
-		se.Router.POST("/api/reminders", reminderHandler.CreateReminder)
-		se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
-		se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
-		se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
+		// --- Temporary/Public endpoints ---
+		tmpApi := se.Router.Group("/api/tmp")
+		tmpApi.POST("/reminders", reminderHandler.CreateReminder)
+		tmpApi.GET("/reminders/{id}", reminderHandler.GetReminder)
+		tmpApi.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
+		tmpApi.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
+		tmpApi.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		tmpApi.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		tmpApi.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
-		// Auth-protected endpoints (PocketBase built-in auth)
-		secure := se.Router.Group("/api/secure")
-		secure.Bind(apis.RequireAuth())
-		secure.POST("/reminders", reminderHandler.CreateReminder)
-		secure.GET("/reminders/{id}", reminderHandler.GetReminder)
-		secure.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
-		secure.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
-		secure.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
-		secure.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-		secure.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
-		// User reminders
-		se.Router.GET("/api/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		// --- Auth-protected endpoints (PocketBase built-in auth) ---
+		api := se.Router.Group("/api")
+		api.Bind(apis.RequireAuth())
+		api.POST("/reminders", reminderHandler.CreateReminder)
+		api.GET("/reminders/{id}", reminderHandler.GetReminder)
+		api.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
+		api.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
+		api.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		api.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		api.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
-		// Reminder actions
-		se.Router.POST("/api/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-		se.Router.POST("/api/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
 		// System status API
 		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
@@ -126,7 +156,6 @@ func main() {
 		// HTML test pages
 		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			// Đọc file HTML tĩnh
 			content, err := os.ReadFile("web/system_status_test.html")
 			if err != nil {
 				return re.String(404, "Test page not found")
