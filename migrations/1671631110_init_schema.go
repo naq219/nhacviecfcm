@@ -10,7 +10,7 @@ func init() {
 	m.Register(func(app core.App) error {
 		// Create musers collection (auth type)
 		musersCollection := core.NewAuthCollection("musers")
-		
+
 		// Add custom fields to musers
 		musersCollection.Fields.Add(&core.TextField{
 			Name:     "fcm_token",
@@ -27,7 +27,7 @@ func init() {
 
 		// Create reminders collection
 		remindersCollection := core.NewBaseCollection("reminders")
-		
+
 		// Add fields to reminders
 		remindersCollection.Fields.Add(&core.RelationField{
 			Name:          "user_id",
@@ -111,7 +111,7 @@ func init() {
 
 		// Create system_status collection
 		systemStatusCollection := core.NewBaseCollection("system_status")
-		
+
 		systemStatusCollection.Fields.Add(&core.NumberField{
 			Name:     "mid",
 			Required: true,
@@ -139,7 +139,7 @@ func init() {
 		systemStatusRecord.Set("worker_enabled", false)
 		systemStatusRecord.Set("last_error", "")
 		systemStatusRecord.Set("updated", types.NowDateTime())
-		
+
 		if err := app.Save(systemStatusRecord); err != nil {
 			return err
 		}

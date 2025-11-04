@@ -121,6 +121,10 @@ func GetAllWithConfig[T any](h DBHelperInterface, query string, params dbx.Param
 // Returns error if execution fails.
 func (h *DBHelper) Exec(query string, params dbx.Params) error {
 	q := h.App.DB().NewQuery(query).Bind(params)
+	// Lấy thông tin câu lệnh và tham số (phiên bản dbx của PocketBase)
+	sqlStr, args := q.SQL(), q.Params()
+	log.Printf("[DBHelper] Exec SQL: %s | args=%v", sqlStr, args)
+
 	_, err := q.Execute()
 	if err != nil {
 		log.Printf("[DBHelper] Exec failed (query=%s): %v", query, err)
