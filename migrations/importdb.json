@@ -866,7 +866,7 @@
       { "id": "number_retry_count", "name": "retry_count", "type": "number", "required": false, "options": { "default": 0 }, "system": false },
       { "id": "text_status", "name": "status", "type": "text", "required": false, "options": { "default": "active", "check": "active|completed|paused" }, "system": false },
       { "id": "datetime_snooze_until", "name": "snooze_until", "type": "date", "required": false, "system": false },
-      { "id": "datetime_last_completed_at", "name": "last_completed_at", "type": "date", "required": false, "system": false },
+      { "id": "datetime_last_coed_at", "name": "last_comd_at", "type": "date", "required": false,"options": { "default": "now()" }, "system": false },
       { "id": "datetime_last_sent_at", "name": "last_sent_at", "type": "date", "required": false, "system": false },
       { "id": "datetime_created", "name": "created", "type": "date", "required": false, "options": { "default": "now()" }, "system": false },
       { "id": "datetime_updated", "name": "updated", "type": "date", "required": false, "options": { "default": "now()" }, "system": false }

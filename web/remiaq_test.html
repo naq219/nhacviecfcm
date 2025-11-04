@@ -548,18 +548,11 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
                 <div id="batch-response" class="response-area"></div>
             </div>
         </div>
-        <!-- API Call Log -->
-        <div class="test-section" style="margin-top: 50px;">
-            <h3>📡 API Call Log</h3>
-            <div id="api-call-log" class="response-area" style="background: #2d3748; color: #e2e8f0;">
-                <p>API calls will appear here...</p>
-            </div>
-        </div>
     </div>
 
     <script>
         // Base API URL - adjust if needed
-        const API_BASE = 'http://localhost:8090'; // Changed from window.location.origin for local file testing
+        const API_BASE = window.location.origin;
         
         // Set default datetime to 1 hour from now
         document.addEventListener('DOMContentLoaded', function() {
@@ -613,53 +606,13 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
             `;
         }
 
-        function syntaxHighlight(json) {
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(/("(\u[a-zA-Z0-9]{4}|[^"\n])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
-                let cls = 'json-number';
-                if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'json-key';
-                    } else {
-                        cls = 'json-string';
-                    }
-                } else if (/true|false/.test(match)) {
-                    cls = 'json-boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'json-null';
-                }
-                return `<span class="${cls}">${match}</span>`;
-            });
-        }
-
-        function logApiCall(method, url, headers, body, responseData) {
-            const logElement = document.getElementById('api-call-log');
-            const timestamp = new Date().toLocaleTimeString();
-            let logContent = `<div style="margin-bottom: 15px; padding: 10px; border-bottom: 1px solid #4a5568;">
-                                <p style="color: #a0aec0;"><strong>[${timestamp}]</strong></p>
-                                <p><span class="json-key">Method:</span> <span style="color: #f6ad55;">${method}</span></p>
-                                <p><span class="json-key">URL:</span> <span style="color: #63b3ed;">${url}</span></p>`;
-            if (headers) {
-                logContent += `<p><span class="json-key">Headers:</span> <pre style="color: #e2e8f0;">${syntaxHighlight(JSON.stringify(headers, null, 2))}</pre></p>`;
-            }
-            if (body) {
-                logContent += `<p><span class="json-key">Body:</span> <pre style="color: #e2e8f0;">${syntaxHighlight(JSON.stringify(body, null, 2))}</pre></p>`;
-            }
-            if (responseData) {
-                 logContent += `<p><span class="json-key">Response:</span> <pre style="color: #e2e8f0;">${syntaxHighlight(JSON.stringify(responseData, null, 2))}</pre></p>`;
-             }
-            logContent += `</div>`;
-            logElement.innerHTML = logContent + logElement.innerHTML; // Add new log at the top
-        }
-
         async function makeRequest(url, options = {}) {
-            const method = options.method || 'GET';
-            const headers = { 'Content-Type': 'application/json', ...options.headers };
-            const body = options.body ? JSON.parse(options.body) : null; // Parse body for logging
-
             try {
                 const response = await fetch(url, {
-                    headers: headers,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
                     ...options
                 });
                 
@@ -667,10 +620,9 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
                 let jsonData;
                 try {
                     jsonData = JSON.parse(data);
-                } catch (e) {
+                } catch {
                     jsonData = data;
                 }
-                logApiCall(method, url, headers, body, jsonData);
                 
                 return {
                     ok: response.ok,
