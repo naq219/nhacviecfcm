@@ -1,13 +1,28 @@
 package migrations
 
 import (
+	"log"
+
 	"github.com/pocketbase/pocketbase/core"
 	m "github.com/pocketbase/pocketbase/migrations"
 	"github.com/pocketbase/pocketbase/tools/types"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func init() {
 	m.Register(func(app core.App) error {
+
+		hashed, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.DefaultCost)
+		_, err := app.DB().Insert("_superusers", map[string]any{
+			"id":       "admin_default",
+			"email":    "a@a.a",
+			"password": string(hashed),
+		}).Execute()
+		if err != nil {
+			log.Println("Error creating admin user:", err)
+			return err
+		}
+
 		// Create musers collection (auth type)
 		musersCollection := core.NewAuthCollection("musers")
 
