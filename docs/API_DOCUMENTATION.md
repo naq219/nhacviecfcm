@@ -31,8 +31,12 @@ Endpoints that require authentication are marked with `(Secure)`.
 - **Success Response**:
   - **Code**: `200 OK`
   - **Content-Type**: `text/plain`
-  - **Body**: `RemiAq API is running!`
-
+```
+  - **Body**:
+    ```text
+    RemiAq API is running!
+    ```
+```
 ### 3.2. System Status
 
 - **Endpoint**: `GET /api/system_status`
@@ -42,6 +46,17 @@ Endpoints that require authentication are marked with `(Secure)`.
   - **Code**: `200 OK`
   - **Content-Type**: `application/json`
   - **Body**: A `SystemStatus` object.
+    ```json
+    {
+        "success":  true,
+        "data":  {
+                     "mid":  1,
+                     "worker_enabled":  false,
+                     "last_error":  "",
+                     "updated":  "2025-11-04T15:55:20.079Z"
+                 }
+    }
+    ```
 
 ---
 
@@ -59,6 +74,18 @@ Endpoints that require authentication are marked with `(Secure)`.
   - **Code**: `200 OK`
   - **Content-Type**: `application/json`
   - **Body**: The updated `SystemStatus` object.
+    ```json
+    {
+        "success":  true,
+        "message":  "System status updated",
+        "data":  {
+                     "mid":  1,
+                     "worker_enabled":  true,
+                     "last_error":  "",
+                     "updated":  "2025-11-05T08:21:36.1001069Z"
+                 }
+    }
+    ```
 
 ### 3.3. Raw SQL Queries (Admin Only)
 
@@ -67,7 +94,7 @@ These endpoints are for administrative purposes and should be protected with str
 **Request Body Format** (for POST/PUT):
 ```json
 {
-  "query": "SELECT * FROM users;"
+  "query": "SELECT * FROM table_name;"
 }
 ```
 **Request Query Parameter** (for GET/DELETE): `?q=SELECT...`
@@ -121,17 +148,7 @@ All reminder endpoints require authentication.
   - **Action**: Marks a reminder as complete.
   - **Response**: A success message.
 
-### 3.5. Temporary/Public Endpoints (for testing/transition)
 
-These endpoints are for temporary use and will be removed in the future. They do not require authentication.
-
-- **Endpoint**: `POST /api/tmp/reminders`
-- **Endpoint**: `GET /api/tmp/reminders/{id}`
-- **Endpoint**: `PUT /api/tmp/reminders/{id}`
-- **Endpoint**: `DELETE /api/tmp/reminders/{id}`
-- **Endpoint**: `GET /api/tmp/users/{userId}/reminders`
-- **Endpoint**: `POST /api/tmp/reminders/{id}/snooze`
-- **Endpoint**: `POST /api/tmp/reminders/{id}/complete`
 
 
 ## 4. Data Models

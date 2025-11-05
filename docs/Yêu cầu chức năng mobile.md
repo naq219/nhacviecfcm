@@ -19,3 +19,5 @@
 - Giao diện hiện đại, không màu mè, không đơn giản
 - các thành phần sắp xếp gọn gàng, để tránh hạn chế scroll .
 - Giao diện nên phân biệt nhóm nếu nhiều thao tác, thông tin. ví dụ tuỳ chọn lặp lại nếu chưa hoàn thành thì có (text giới thiệu, edittext số lần nhắc, edittext nhập thời gian lặp lại) thì phải làm sao để người dùng biết là  nhưng field đó là của 1 chức năng. 
+
+dùng floating hint cho edittext 
