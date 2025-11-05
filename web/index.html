@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RemiAq - Quản lý nhắc nhở</title>
+    
+    <!-- Vue.js 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom styles for soft design -->
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-light: #a5b4fc;
+            --secondary-color: #f59e0b;
+            --background: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-larger: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .soft-button {
+            transition: all 0.3s ease;
+            transform: translateY(0);
+        }
+        
+        .soft-button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-larger);
+        }
+        
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s ease;
+        }
+        
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+        
+        .slide-enter-active, .slide-leave-active {
+            transition: all 0.3s ease;
+        }
+        
+        .slide-enter-from, .slide-leave-to {
+            transform: translateY(-20px);
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="glass-card shadow-lg sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-bell text-white text-lg"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800">RemiAq</h1>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <span v-if="user" class="text-gray-600">Xin chào, {{ user.email }}</span>
+                        <button v-if="user" @click="logout" class="soft-button px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Đăng xuất
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Login/Register Section -->
+            <div v-if="!user" class="max-w-md mx-auto">
+                <div class="glass-card rounded-2xl shadow-xl p-8">
+                    <div class="text-center mb-8">
+                        <div class="w-20 h-20 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center">
+                            <i class="fas fa-bell text-white text-3xl"></i>
+                        </div>
+                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Chào mừng đến RemiAq</h2>
+                        <p class="text-gray-600">Quản lý nhắc nhở thông minh của bạn</p>
+                    </div>
+
+                    <!-- Auth Tabs -->
+                    <div class="flex mb-6 bg-gray-100 rounded-lg p-1">
+                        <button @click="authTab = 'login'" 
+                                :class="authTab === 'login' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-600'"
+                                class="flex-1 py-2 px-4 rounded-md font-medium transition-all">
+                            Đăng nhập
+                        </button>
+                        <button @click="authTab = 'register'" 
+                                :class="authTab === 'register' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-600'"
+                                class="flex-1 py-2 px-4 rounded-md font-medium transition-all">
+                            Đăng ký
+                        </button>
+                    </div>
+
+                    <!-- Login Form -->
+                    <transition name="fade" mode="out-in">
+                        <div v-if="authTab === 'login'" key="login">
+                            <form @submit.prevent="login" class="space-y-4">
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Email</label>
+                                    <input v-model="loginForm.email" type="email" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="your@email.com" required>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Mật khẩu</label>
+                                    <input v-model="loginForm.password" type="password" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="••••••••" required>
+                                </div>
+                                <button type="submit" 
+                                        class="w-full soft-button py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg font-medium">
+                                    <i class="fas fa-sign-in-alt mr-2"></i>Đăng nhập
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Register Form -->
+                        <div v-else key="register">
+                            <form @submit.prevent="register" class="space-y-4">
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Email</label>
+                                    <input v-model="registerForm.email" type="email" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="your@email.com" required>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Mật khẩu</label>
+                                    <input v-model="registerForm.password" type="password" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="••••••••" required>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Xác nhận mật khẩu</label>
+                                    <input v-model="registerForm.confirmPassword" type="password" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="••••••••" required>
+                                </div>
+                                <button type="submit" 
+                                        class="w-full soft-button py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-lg font-medium">
+                                    <i class="fas fa-user-plus mr-2"></i>Đăng ký
+                                </button>
+                            </form>
+                        </div>
+                    </transition>
+                </div>
+            </div>
+
+            <!-- Main App (when logged in) -->
+            <div v-else>
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="glass-card rounded-xl p-6 text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-list text-blue-600 text-xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-800">{{ reminders.length }}</h3>
+                        <p class="text-gray-600">Tổng nhắc nhở</p>
+                    </div>
+                    <div class="glass-card rounded-xl p-6 text-center">
+                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-800">{{ completedCount }}</h3>
+                        <p class="text-gray-600">Đã hoàn thành</p>
+                    </div>
+                    <div class="glass-card rounded-xl p-6 text-center">
+                        <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fas fa-clock text-orange-600 text-xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-800">{{ pendingCount }}</h3>
+                        <p class="text-gray-600">Đang chờ</p>
+                    </div>
+                </div>
+
+                <!-- Add Reminder Button -->
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Danh sách nhắc nhở</h2>
+                    <button @click="showAddForm = !showAddForm" 
+                            class="soft-button px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg font-medium">
+                        <i class="fas fa-plus mr-2"></i>
+                        {{ showAddForm ? 'Đóng' : 'Thêm nhắc nhở' }}
+                    </button>
+                </div>
+
+                <!-- Add Reminder Form (Collapsible) -->
+                <transition name="slide">
+                    <div v-if="showAddForm" class="glass-card rounded-xl p-6 mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Tạo nhắc nhở mới</h3>
+                        <form @submit.prevent="addReminder" class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Tiêu đề</label>
+                                    <input v-model="newReminder.title" type="text" 
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                           placeholder="Nhập tiêu đề" required>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 font-medium mb-2">Loại</label>
+                                    <select v-model="newReminder.type" 
+                                            class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                        <option value="one_time">Một lần</option>
+                                        <option value="daily">Hằng ngày</option>
+                                        <option value="weekly">Hằng tuần</option>
+                                        <option value="monthly">Hằng tháng</option>
+                                        <option value="yearly">Hằng năm</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Nội dung</label>
+                                <textarea v-model="newReminder.content" rows="3"
+                                          class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                          placeholder="Nhập nội dung nhắc nhở"></textarea>
+                            </div>
+
+                            <!-- Collapsible Advanced Options -->
+                            <div class="border-t pt-4">
+                                <button type="button" @click="showAdvanced = !showAdvanced" 
+                                        class="flex items-center text-indigo-600 hover:text-indigo-800 font-medium">
+                                    <i class="fas fa-cog mr-2"></i>
+                                    Tùy chọn nâng cao
+                                    <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="ml-2"></i>
+                                </button>
+                                
+                                <transition name="slide">
+                                    <div v-if="showAdvanced" class="mt-4 space-y-4">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-gray-700 font-medium mb-2">Ngày đến hạn</label>
+                                                <input v-model="newReminder.due_date" type="datetime-local" 
+                                                       class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                            </div>
+                                            <div>
+                                                <label class="block text-gray-700 font-medium mb-2">Âm lịch</label>
+                                                <label class="flex items-center">
+                                                    <input v-model="newReminder.is_lunar" type="checkbox" 
+                                                           class="mr-2 w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
+                                                    <span>Sử dụng âm lịch</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-gray-700 font-medium mb-2">Biểu thức Cron</label>
+                                            <input v-model="newReminder.cron_expression" type="text" 
+                                                   class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                   placeholder="0 9 * * 1-5 (tùy chọn)">
+                                        </div>
+                                    </div>
+                                </transition>
+                            </div>
+
+                            <div class="flex space-x-4">
+                                <button type="submit" 
+                                        class="flex-1 soft-button py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-lg font-medium">
+                                    <i class="fas fa-save mr-2"></i>Lưu nhắc nhở
+                                </button>
+                                <button type="button" @click="resetForm" 
+                                        class="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium">
+                                    <i class="fas fa-redo mr-2"></i>Làm mới
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </transition>
+
+                <!-- Reminders List -->
+                <div class="space-y-4">
+                    <div v-for="reminder in reminders" :key="reminder.id" 
+                         class="reminder-card glass-card rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center mb-2">
+                                    <div class="status-indicator" :class="'status-' + reminder.status"></div>
+                                    <h3 class="text-lg font-semibold text-gray-800">{{ reminder.title }}</h3>
+                                    <span class="ml-2 px-2 py-1 text-xs rounded-full type-badge" 
+                                          :class="'type-' + reminder.type">
+                                        {{ getTypeLabel(reminder.type) }}
+                                    </span>
+                                </div>
+                                <p class="text-gray-600 mb-3">{{ reminder.content }}</p>
+                                <div class="flex items-center text-sm text-gray-500 space-x-4">
+                                    <span><i class="fas fa-calendar mr-1"></i>{{ formatDate(reminder.due_date) }}</span>
+                                    <span v-if="reminder.is_lunar"><i class="fas fa-moon mr-1"></i>Âm lịch</span>
+                                </div>
+                            </div>
+                            <div class="reminder-actions flex space-x-2">
+                                <button @click="completeReminder(reminder.id)" 
+                                        v-if="reminder.status !== 'completed'"
+                                        class="soft-button px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                                        title="Hoàn thành">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button @click="snoozeReminder(reminder.id)" 
+                                        v-if="reminder.status === 'pending'"
+                                        class="soft-button px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200"
+                                        title="Trì hoãn">
+                                    <i class="fas fa-clock"></i>
+                                </button>
+                                <button @click="editReminder(reminder)" 
+                                        class="soft-button px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                                        title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button @click="deleteReminder(reminder.id)" 
+                                        class="soft-button px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                                        title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="reminders.length === 0" class="text-center py-12">
+                        <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-bell-slash text-gray-400 text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-gray-600 mb-2">Chưa có nhắc nhở nào</h3>
+                        <p class="text-gray-500">Hãy tạo nhắc nhở đầu tiên của bạn!</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    user: null,
+                    authTab: 'login',
+                    loginForm: {
+                        email: '',
+                        password: ''
+                    },
+                    registerForm: {
+                        email: '',
+                        password: '',
+                        confirmPassword: ''
+                    },
+                    showAddForm: false,
+                    showAdvanced: false,
+                    newReminder: {
+                        title: '',
+                        content: '',
+                        type: 'one_time',
+                        due_date: '',
+                        is_lunar: false,
+                        cron_expression: ''
+                    },
+                    reminders: [],
+                    editingReminder: null
+                }
+            },
+            computed: {
+                completedCount() {
+                    return this.reminders.filter(r => r.status === 'completed').length;
+                },
+                pendingCount() {
+                    return this.reminders.filter(r => r.status === 'pending').length;
+                }
+            },
+            methods: {
+                // Authentication methods
+                async login() {
+                    try {
+                        // API integration placeholder
+                        console.log('Logging in with:', this.loginForm);
+                        this.user = { email: this.loginForm.email };
+                        this.loadReminders();
+                        this.showNotification('Đăng nhập thành công!', 'success');
+                    } catch (error) {
+                        this.showNotification('Đăng nhập thất bại!', 'error');
+                    }
+                },
+
+                async register() {
+                    if (this.registerForm.password !== this.registerForm.confirmPassword) {
+                        this.showNotification('Mật khẩu không khớp!', 'error');
+                        return;
+                    }
+                    try {
+                        // API integration placeholder
+                        console.log('Registering with:', this.registerForm);
+                        this.user = { email: this.registerForm.email };
+                        this.loadReminders();
+                        this.showNotification('Đăng ký thành công!', 'success');
+                    } catch (error) {
+                        this.showNotification('Đăng ký thất bại!', 'error');
+                    }
+                },
+
+                logout() {
+                    this.user = null;
+                    this.reminders = [];
+                    this.resetAuthForms();
+                    this.showNotification('Đăng xuất thành công!', 'info');
+                },
+
+                // Reminder methods
+                async loadReminders() {
+                    try {
+                        // API integration placeholder
+                        this.reminders = [
+                            {
+                                id: '1',
+                                title: 'Họp team hàng tuần',
+                                content: 'Họp review tiến độ dự án',
+                                type: 'weekly',
+                                due_date: '2024-01-15T09:00:00Z',
+                                is_lunar: false,
+                                status: 'pending',
+                                cron_expression: '0 9 * * 1'
+                            },
+                            {
+                                id: '2',
+                                title: 'Sinh nhật mẹ',
+                                content: 'Mua quà và chuẩn bị bánh sinh nhật',
+                                type: 'yearly',
+                                due_date: '2024-03-20T00:00:00Z',
+                                is_lunar: true,
+                                status: 'pending',
+                                cron_expression: ''
+                            }
+                        ];
+                    } catch (error) {
+                        this.showNotification('Không thể tải danh sách nhắc nhở!', 'error');
+                    }
+                },
+
+                async addReminder() {
+                    try {
+                        // API integration placeholder
+                        const reminder = {
+                            id: Date.now().toString(),
+                            ...this.newReminder,
+                            status: 'pending',
+                            created: new Date().toISOString(),
+                            updated: new Date().toISOString()
+                        };
+                        this.reminders.unshift(reminder);
+                        this.resetForm();
+                        this.showAddForm = false;
+                        this.showNotification('Thêm nhắc nhở thành công!', 'success');
+                    } catch (error) {
+                        this.showNotification('Thêm nhắc nhở thất bại!', 'error');
+                    }
+                },
+
+                async completeReminder(id) {
+                    try {
+                        const reminder = this.reminders.find(r => r.id === id);
+                        if (reminder) {
+                            reminder.status = 'completed';
+                            this.showNotification('Đã hoàn thành nhắc nhở!', 'success');
+                        }
+                    } catch (error) {
+                        this.showNotification('Không thể cập nhật trạng thái!', 'error');
+                    }
+                },
+
+                async snoozeReminder(id) {
+                    try {
+                        this.showNotification('Đã trì hoãn nhắc nhở 1 giờ!', 'info');
+                    } catch (error) {
+                        this.showNotification('Không thể trì hoãn nhắc nhở!', 'error');
+                    }
+                },
+
+                editReminder(reminder) {
+                    this.newReminder = { ...reminder };
+                    this.editingReminder = reminder;
+                    this.showAddForm = true;
+                },
+
+                async deleteReminder(id) {
+                    if (confirm('Bạn có chắc chắn muốn xóa nhắc nhở này?')) {
+                        try {
+                            this.reminders = this.reminders.filter(r => r.id !== id);
+                            this.showNotification('Đã xóa nhắc nhở!', 'success');
+                        } catch (error) {
+                            this.showNotification('Không thể xóa nhắc nhở!', 'error');
+                        }
+                    }
+                },
+
+                // Utility methods
+                resetForm() {
+                    this.newReminder = {
+                        title: '',
+                        content: '',
+                        type: 'one_time',
+                        due_date: '',
+                        is_lunar: false,
+                        cron_expression: ''
+                    };
+                    this.editingReminder = null;
+                    this.showAdvanced = false;
+                },
+
+                resetAuthForms() {
+                    this.loginForm = { email: '', password: '' };
+                    this.registerForm = { email: '', password: '', confirmPassword: '' };
+                },
+
+                getStatusColor(status) {
+                    const colors = {
+                        pending: 'bg-yellow-400',
+                        completed: 'bg-green-400',
+                        snoozed: 'bg-blue-400',
+                        error: 'bg-red-400'
+                    };
+                    return colors[status] || 'bg-gray-400';
+                },
+
+                getTypeBadge(type) {
+                    const badges = {
+                        one_time: 'bg-gray-100 text-gray-700',
+                        daily: 'bg-blue-100 text-blue-700',
+                        weekly: 'bg-green-100 text-green-700',
+                        monthly: 'bg-purple-100 text-purple-700',
+                        yearly: 'bg-orange-100 text-orange-700'
+                    };
+                    return badges[type] || 'bg-gray-100 text-gray-700';
+                },
+
+                getTypeLabel(type) {
+                    const labels = {
+                        one_time: 'Một lần',
+                        daily: 'Hằng ngày',
+                        weekly: 'Hằng tuần',
+                        monthly: 'Hằng tháng',
+                        yearly: 'Hằng năm'
+                    };
+                    return labels[type] || 'Không xác định';
+                },
+
+                formatDate(dateString) {
+                    if (!dateString) return 'Không có';
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString('vi-VN', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                },
+
+                showNotification(message, type = 'info') {
+                    // Simple notification system
+                    const notification = document.createElement('div');
+                    notification.className = `notification ${type === 'success' ? 'notification-success' :
+                        type === 'error' ? 'notification-error' :
+                        type === 'warning' ? 'notification-warning' : 'notification-info'}`;
+                    notification.textContent = message;
+                    document.body.appendChild(notification);
+                    
+                    // Show notification
+                    setTimeout(() => notification.classList.add('show'), 100);
+                    
+                    // Remove notification
+                    setTimeout(() => {
+                        notification.classList.remove('show');
+                        setTimeout(() => notification.remove(), 300);
+                    }, 3000);
+                }
+            },
+
+            mounted() {
+                // Simulate auto-login for demo
+                // this.user = { email: 'demo@example.com' };
+                // this.loadReminders();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
