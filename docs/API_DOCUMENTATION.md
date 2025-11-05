@@ -130,9 +130,9 @@ All reminder endpoints require authentication.
   - **Action**: Deletes a reminder.
   - **Response**: A success message.
 
-- **Endpoint**: `GET /api/users/{userId}/reminders`
-  - **Action**: Retrieves all reminders for a specific user.
-  - **Response**: An array of `Reminder` objects.
+- **Endpoint**: `GET /api/collections/reminders/records`
+  - **Action**: Retrieves all reminders for the authenticated user. The API supports filtering, sorting, and pagination via query parameters. See PocketBase API documentation for details.
+  - **Response**: A paginated list of `Reminder` objects.
 
 - **Endpoint**: `POST /api/reminders/{id}/snooze`
   - **Action**: Snoozes a reminder for a specified duration.
