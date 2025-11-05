@@ -23,15 +23,16 @@ func TestScheduleCalculator_CalculateNextTrigger(t *testing.T) {
 
 	t.Run("should handle one-time reminder", func(t *testing.T) {
 		now := time.Now()
+		triggerTime := now.Add(time.Hour)
 		reminder := &models.Reminder{
 			Type:          models.ReminderTypeOneTime,
-			NextTriggerAt: now.Add(time.Hour),
+			NextTriggerAt: triggerTime.Format(time.RFC3339),
 		}
 
 		result, err := calculator.CalculateNextTrigger(reminder, now)
 
 		assert.NoError(t, err)
-		assert.Equal(t, reminder.NextTriggerAt, result)
+		assert.WithinDuration(t, triggerTime, result, time.Second)
 	})
 
 	t.Run("should handle recurring reminder", func(t *testing.T) {
@@ -72,7 +73,7 @@ func TestScheduleCalculator_calculateOneTime(t *testing.T) {
 		now := time.Now()
 		triggerTime := now.Add(2 * time.Hour)
 		reminder := &models.Reminder{
-			NextTriggerAt: triggerTime,
+			NextTriggerAt: triggerTime.Format(time.RFC3339),
 		}
 
 		result, err := calculator.calculateOneTime(reminder, now)
@@ -84,7 +85,7 @@ func TestScheduleCalculator_calculateOneTime(t *testing.T) {
 	t.Run("should return fromTime when NextTriggerAt is zero", func(t *testing.T) {
 		now := time.Now()
 		reminder := &models.Reminder{
-			NextTriggerAt: time.Time{},
+			NextTriggerAt: "",
 		}
 
 		result, err := calculator.calculateOneTime(reminder, now)
@@ -100,19 +101,20 @@ func TestScheduleCalculator_calculateIntervalBased(t *testing.T) {
 	t.Run("should calculate from completion time when base_on=completion", func(t *testing.T) {
 		now := time.Now()
 		completedAt := now.Add(-time.Hour)
+		completedAtStr := completedAt.Format(time.RFC3339)
 		reminder := &models.Reminder{
 			RecurrencePattern: &models.RecurrencePattern{
 				IntervalSeconds: 3600, // 1 hour
 				BaseOn:          models.BaseOnCompletion,
 			},
-			LastCompletedAt: &completedAt,
+			LastCompletedAt: completedAtStr,
 		}
 
 		result, err := calculator.calculateIntervalBased(reminder, now)
 
 		assert.NoError(t, err)
 		expected := completedAt.Add(time.Hour)
-		assert.Equal(t, expected, result)
+		assert.WithinDuration(t, expected, result, time.Second)
 	})
 
 	t.Run("should calculate from creation time when never completed", func(t *testing.T) {
@@ -124,14 +126,14 @@ func TestScheduleCalculator_calculateIntervalBased(t *testing.T) {
 				BaseOn:          models.BaseOnCompletion,
 			},
 			Created:         created,
-			LastCompletedAt: nil,
+			LastCompletedAt: "",
 		}
 
 		result, err := calculator.calculateIntervalBased(reminder, now)
 
 		assert.NoError(t, err)
 		expected := created.Add(time.Hour)
-		assert.Equal(t, expected, result)
+		assert.WithinDuration(t, expected, result, time.Second)
 	})
 
 	t.Run("should calculate from fromTime for creation-based", func(t *testing.T) {

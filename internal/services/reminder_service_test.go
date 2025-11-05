@@ -47,17 +47,17 @@ func (m *MockReminderRepository) GetDueReminders(ctx context.Context, now time.T
 	return args.Get(0).([]*models.Reminder), args.Error(1)
 }
 
-func (m *MockReminderRepository) UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error {
+func (m *MockReminderRepository) UpdateSnooze(ctx context.Context, id string, snoozeUntil string) error {
 	args := m.Called(ctx, id, snoozeUntil)
 	return args.Error(0)
 }
 
-func (m *MockReminderRepository) MarkCompleted(ctx context.Context, id string, completedAt time.Time) error {
+func (m *MockReminderRepository) MarkCompleted(ctx context.Context, id string, completedAt string) error {
 	args := m.Called(ctx, id, completedAt)
 	return args.Error(0)
 }
 
-func (m *MockReminderRepository) UpdateLastSent(ctx context.Context, id string, lastSent time.Time) error {
+func (m *MockReminderRepository) UpdateLastSent(ctx context.Context, id string, lastSent string) error {
 	args := m.Called(ctx, id, lastSent)
 	return args.Error(0)
 }
@@ -137,7 +137,7 @@ func createTestReminder() *models.Reminder {
 		Type:          models.ReminderTypeOneTime,
 		CalendarType:  models.CalendarTypeSolar,
 		Status:        models.ReminderStatusActive,
-		NextTriggerAt: now.Add(time.Hour),
+		NextTriggerAt: now.Add(time.Hour).Format(time.RFC3339),
 		Created:       now,
 		Updated:       now,
 	}
@@ -176,7 +176,7 @@ func TestReminderService_CreateReminder(t *testing.T) {
 
 		reminder := createTestReminder()
 		reminder.ID = "" // Test ID generation
-		reminder.NextTriggerAt = time.Time{} // Test next trigger calculation
+		reminder.NextTriggerAt = "" // Test next trigger calculation
 
 		reminderRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil)
 
@@ -185,7 +185,7 @@ func TestReminderService_CreateReminder(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, reminder.ID)
 		assert.Equal(t, models.ReminderStatusActive, reminder.Status)
-		assert.False(t, reminder.NextTriggerAt.IsZero()) // Check that NextTriggerAt was set
+		assert.NotEmpty(t, reminder.NextTriggerAt) // Check that NextTriggerAt was set
 		reminderRepo.AssertExpectations(t)
 	})
 
@@ -238,7 +238,7 @@ func TestReminderService_CompleteReminder(t *testing.T) {
 		reminder.Type = models.ReminderTypeOneTime
 
 		reminderRepo.On("GetByID", mock.Anything, "test-id").Return(reminder, nil)
-		reminderRepo.On("MarkCompleted", mock.Anything, "test-id", mock.AnythingOfType("time.Time")).Return(nil)
+		reminderRepo.On("Update", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil)
 
 		err := service.CompleteReminder(context.Background(), "test-id")
 
@@ -270,7 +270,7 @@ func TestReminderService_SnoozeReminder(t *testing.T) {
 		service := NewReminderService(reminderRepo, &MockUserRepository{}, nil, NewScheduleCalculator(NewLunarCalendar()))
 
 		duration := 30 * time.Minute
-		reminderRepo.On("UpdateSnooze", mock.Anything, "test-id", mock.AnythingOfType("*time.Time")).Return(nil)
+		reminderRepo.On("UpdateSnooze", mock.Anything, "test-id", mock.AnythingOfType("string")).Return(nil)
 
 		err := service.SnoozeReminder(context.Background(), "test-id", duration)
 
@@ -293,7 +293,7 @@ func TestReminderService_ProcessDueReminders(t *testing.T) {
 		reminderRepo.On("GetDueReminders", mock.Anything, mock.AnythingOfType("time.Time")).Return([]*models.Reminder{reminder}, nil)
 		userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
 		// Only expect MarkCompleted for one-time reminder (no FCM service configured)
-		reminderRepo.On("MarkCompleted", mock.Anything, "test-id", mock.AnythingOfType("time.Time")).Return(nil)
+		reminderRepo.On("MarkCompleted", mock.Anything, "test-id", mock.AnythingOfType("string")).Return(nil)
 
 		err := service.ProcessDueReminders(context.Background())
 
@@ -359,7 +359,7 @@ func BenchmarkReminderService_CreateReminder(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		reminder := createTestReminder()
 		reminder.ID = ""
-		reminder.NextTriggerAt = time.Time{}
+		reminder.NextTriggerAt = ""
 		_ = service.CreateReminder(context.Background(), reminder)
 	}
 }

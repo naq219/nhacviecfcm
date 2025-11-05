@@ -52,6 +52,8 @@ func TestReminderRepo_Create(t *testing.T) {
 				assert.Contains(t, query, "INSERT INTO reminders")
 				assert.Equal(t, "test-id", params["id"])
 				assert.Equal(t, "user-123", params["user_id"])
+				assert.NotContains(t, params, "created")
+				assert.NotContains(t, params, "updated")
 				return nil
 			},
 		}
@@ -147,6 +149,7 @@ func TestReminderRepo_Update(t *testing.T) {
 				assert.Contains(t, query, "UPDATE reminders SET")
 				assert.Equal(t, "test-id", params["id"])
 				assert.Equal(t, "Updated Title", params["title"])
+				assert.NotContains(t, params, "updated")
 				return nil
 			},
 		}
@@ -185,7 +188,7 @@ func TestReminderRepo_GetDueReminders(t *testing.T) {
 			GetAllRowsFn: func(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
 				assert.Contains(t, query, "next_trigger_at <= {:before_time}")
 				assert.Contains(t, query, "status = 'active'")
-				assert.Equal(t, beforeTime, params["before_time"])
+				assert.Equal(t, beforeTime.Format(time.RFC3339), params["before_time"])
 				return []dbx.NullStringMap{
 					mockReminderRow("rem-1", "user-123", "Due Reminder", "active"),
 				}, nil
@@ -208,7 +211,7 @@ func TestReminderRepo_UpdateNextTrigger(t *testing.T) {
 			ExecFn: func(query string, params dbx.Params) error {
 				assert.Contains(t, query, "UPDATE reminders SET next_trigger_at")
 				assert.Equal(t, "test-id", params["id"])
-				assert.Equal(t, nextTrigger, params["next_trigger"])
+				assert.Equal(t, nextTrigger.Format(time.RFC3339), params["next_trigger"])
 				return nil
 			},
 		}
@@ -242,13 +245,13 @@ func TestReminderRepo_MarkCompleted(t *testing.T) {
 			ExecFn: func(query string, params dbx.Params) error {
 				assert.Contains(t, query, "status = {:status}")
 				assert.Equal(t, "completed", params["status"])
-				assert.Equal(t, completedAt, params["completed_at"])
+				assert.Equal(t, completedAt.Format(time.RFC3339), params["completed_at"])
 				return nil
 			},
 		}
 
 		repo := &ReminderRepo{helper: mockHelper}
-		err := repo.MarkCompleted(context.Background(), "test-id", completedAt)
+		err := repo.MarkCompleted(context.Background(), "test-id", completedAt.Format(time.RFC3339))
 		assert.NoError(t, err)
 	})
 }
@@ -259,13 +262,13 @@ func TestReminderRepo_UpdateSnooze(t *testing.T) {
 		mockHelper := &MockDBHelper{
 			ExecFn: func(query string, params dbx.Params) error {
 				assert.Contains(t, query, "snooze_until = {:snooze_until}")
-				assert.Equal(t, &snoozeUntil, params["snooze_until"])
+				assert.Equal(t, snoozeUntil.Format(time.RFC3339), params["snooze_until"])
 				return nil
 			},
 		}
 
 		repo := &ReminderRepo{helper: mockHelper}
-		err := repo.UpdateSnooze(context.Background(), "test-id", &snoozeUntil)
+		err := repo.UpdateSnooze(context.Background(), "test-id", snoozeUntil.Format(time.RFC3339))
 		assert.NoError(t, err)
 	})
 }
@@ -276,13 +279,13 @@ func TestReminderRepo_UpdateLastSent(t *testing.T) {
 		mockHelper := &MockDBHelper{
 			ExecFn: func(query string, params dbx.Params) error {
 				assert.Contains(t, query, "last_sent_at = {:sent_at}")
-				assert.Equal(t, sentAt, params["sent_at"])
+				assert.Equal(t, sentAt.Format(time.RFC3339), params["sent_at"])
 				return nil
 			},
 		}
 
 		repo := &ReminderRepo{helper: mockHelper}
-		err := repo.UpdateLastSent(context.Background(), "test-id", sentAt)
+		err := repo.UpdateLastSent(context.Background(), "test-id", sentAt.Format(time.RFC3339))
 		assert.NoError(t, err)
 	})
 }

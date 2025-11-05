@@ -32,14 +32,12 @@ func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) er
             id, user_id, title, description, type, calendar_type,
             next_trigger_at, trigger_time_of_day, recurrence_pattern,
             repeat_strategy, retry_interval_sec, max_retries, status,
-            snooze_until, last_completed_at, last_sent_at,
-            created, updated
+            snooze_until, last_completed_at, last_sent_at
         ) VALUES (
             {:id}, {:user_id}, {:title}, {:description}, {:type}, {:calendar_type},
             {:next_trigger_at}, {:trigger_time_of_day}, {:recurrence_pattern},
             {:repeat_strategy}, {:retry_interval_sec}, {:max_retries}, {:status},
-            {:snooze_until}, {:last_completed_at}, {:last_sent_at},
-            {:created}, {:updated}
+            {:snooze_until}, {:last_completed_at}, {:last_sent_at}
         )
     `
 
@@ -60,8 +58,6 @@ func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) er
 		"snooze_until":        reminder.SnoozeUntil,
 		"last_completed_at":   reminder.LastCompletedAt,
 		"last_sent_at":        reminder.LastSentAt,
-		"created":             reminder.Created,
-		"updated":             reminder.Updated,
 	})
 }
 
@@ -100,8 +96,7 @@ func (r *ReminderRepo) Update(ctx context.Context, reminder *models.Reminder) er
             repeat_strategy = {:repeat_strategy}, retry_interval_sec = {:retry_interval_sec}, 
             max_retries = {:max_retries}, status = {:status},
             snooze_until = {:snooze_until}, last_completed_at = {:last_completed_at}, 
-            last_sent_at = {:last_sent_at},
-            updated = {:updated}
+            last_sent_at = {:last_sent_at}
         WHERE id = {:id}
     `
 
@@ -121,7 +116,6 @@ func (r *ReminderRepo) Update(ctx context.Context, reminder *models.Reminder) er
 		"snooze_until":        reminder.SnoozeUntil,
 		"last_completed_at":   reminder.LastCompletedAt,
 		"last_sent_at":        reminder.LastSentAt,
-		"updated":             time.Now(),
 		"id":                  reminder.ID,
 	})
 }
@@ -140,7 +134,7 @@ func (r *ReminderRepo) GetDueReminders(ctx context.Context, beforeTime time.Time
     `
 
 	reminders, err := db.GetAll[models.Reminder](r.helper, query,
-		dbx.Params{"before_time": beforeTime})
+		dbx.Params{"before_time": beforeTime.Format(time.RFC3339)})
 	if err != nil {
 		return nil, err
 	}
@@ -155,30 +149,27 @@ func (r *ReminderRepo) GetDueReminders(ctx context.Context, beforeTime time.Time
 
 func (r *ReminderRepo) UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET next_trigger_at = {:next_trigger}, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET next_trigger_at = {:next_trigger} WHERE id = {:id}",
 		dbx.Params{
-			"next_trigger": nextTrigger,
-			"updated":      time.Now(),
+			"next_trigger": nextTrigger.Format(time.RFC3339),
 			"id":           id,
 		})
 }
 
 func (r *ReminderRepo) IncrementRetryCount(ctx context.Context, id string) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET retry_count = retry_count + 1, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET retry_count = retry_count + 1 WHERE id = {:id}",
 		dbx.Params{
-			"updated": time.Now(),
-			"id":      id,
+			"id": id,
 		})
 }
 
 func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt string) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET status = {:status}, last_completed_at = {:completed_at}, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET status = {:status}, last_completed_at = {:completed_at} WHERE id = {:id}",
 		dbx.Params{
 			"status":       "completed",
 			"completed_at": completedAt,
-			"updated":      time.Now().UTC(),
 			"id":           id,
 		})
 }
@@ -186,10 +177,9 @@ func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt
 // UpdateSnooze sets the snooze_until time for a reminder.
 func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil string) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET snooze_until = {:snooze_until}, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET snooze_until = {:snooze_until} WHERE id = {:id}",
 		dbx.Params{
 			"snooze_until": snoozeUntil,
-			"updated":      time.Now().UTC(),
 			"id":           id,
 		},
 	)
@@ -197,20 +187,18 @@ func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil 
 
 func (r *ReminderRepo) UpdateLastSent(ctx context.Context, id string, lastSentAt string) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET last_sent_at = {:sent_at}, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET last_sent_at = {:sent_at} WHERE id = {:id}",
 		dbx.Params{
 			"sent_at": lastSentAt,
-			"updated": time.Now().UTC(),
 			"id":      id,
 		})
 }
 
 func (r *ReminderRepo) UpdateStatus(ctx context.Context, id string, status string) error {
 	return r.helper.Exec(
-		"UPDATE reminders SET status = {:status}, updated = {:updated} WHERE id = {:id}",
+		"UPDATE reminders SET status = {:status} WHERE id = {:id}",
 		dbx.Params{
-			"status":  status,
-			"updated": time.Now(),
-			"id":      id,
+			"status": status,
+			"id":     id,
 		})
 }

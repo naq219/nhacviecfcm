@@ -163,7 +163,7 @@ func TestIntegration_ServiceInteraction(t *testing.T) {
 
 		reminder := &models.Reminder{
 			Type:          models.ReminderTypeOneTime,
-			NextTriggerAt: triggerTime,
+			NextTriggerAt: triggerTime.Format(time.RFC3339),
 		}
 
 		nextTime, err := scheduleCalc.CalculateNextTrigger(reminder, baseTime)

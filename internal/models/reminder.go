@@ -12,7 +12,7 @@ type Reminder struct {
 	Description       string             `json:"description" db:"description"`
 	Type              string             `json:"type" db:"type"`                   // one_time, recurring
 	CalendarType      string             `json:"calendar_type" db:"calendar_type"` // solar, lunar
-	NextTriggerAt     time.Time          `json:"next_trigger_at" db:"next_trigger_at"`
+	NextTriggerAt     string             `json:"next_trigger_at" db:"next_trigger_at"`
 	TriggerTimeOfDay  string             `json:"trigger_time_of_day" db:"trigger_time_of_day"` // HH:MM format
 	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern" db:"recurrence_pattern"`   // JSON field
 	RepeatStrategy    string             `json:"repeat_strategy" db:"repeat_strategy"`         // none, retry_until_complete
@@ -129,14 +129,25 @@ func (r *Reminder) ShouldSend(now time.Time) bool {
 		return false
 	}
 
-	// 🔧 FIX: Check snooze - parse string to time.Time
+	nowTime := now.UTC()
+
+	// Check snooze
 	if r.SnoozeUntil != "" {
 		snoozeTime, err := time.Parse(time.RFC3339, r.SnoozeUntil)
-		if err == nil && now.Before(snoozeTime) {
+		if err == nil && nowTime.Before(snoozeTime) {
 			return false
 		}
 	}
 
 	// Check trigger time
-	return !now.Before(r.NextTriggerAt)
+	if r.NextTriggerAt == "" {
+		return false
+	}
+	triggerTime, err := time.Parse(time.RFC3339, r.NextTriggerAt)
+	if err != nil {
+		// Consider how to handle parse errors. For now, treat as not ready.
+		return false
+	}
+
+	return !nowTime.Before(triggerTime)
 }
