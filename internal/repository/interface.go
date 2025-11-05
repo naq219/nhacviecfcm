@@ -23,9 +23,9 @@ type ReminderRepository interface {
 	UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error
 	UpdateStatus(ctx context.Context, id string, status string) error
 	IncrementRetryCount(ctx context.Context, id string) error
-	UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error
-	MarkCompleted(ctx context.Context, id string, completedAt time.Time) error
-	UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error
+	UpdateSnooze(ctx context.Context, id string, snoozeUntil string) error
+	MarkCompleted(ctx context.Context, id string, completedAt string) error
+	UpdateLastSent(ctx context.Context, id string, lastSentAt string) error
 }
 
 // UserRepository defines operations for user data access

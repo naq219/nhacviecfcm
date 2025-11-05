@@ -183,14 +183,16 @@ func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt
 		})
 }
 
-func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil *time.Time) error {
+// UpdateSnooze sets the snooze_until time for a reminder.
+func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil string) error {
 	return r.helper.Exec(
 		"UPDATE reminders SET snooze_until = {:snooze_until}, updated = {:updated} WHERE id = {:id}",
 		dbx.Params{
 			"snooze_until": snoozeUntil,
-			"updated":      time.Now(),
+			"updated":      time.Now().UTC(),
 			"id":           id,
-		})
+		},
+	)
 }
 
 func (r *ReminderRepo) UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error {

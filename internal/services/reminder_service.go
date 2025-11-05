@@ -96,7 +96,7 @@ func (s *ReminderService) GetUserReminders(ctx context.Context, userID string) (
 // SnoozeReminder postpones a reminder
 func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duration time.Duration) error {
 	snoozeUntil := time.Now().Add(duration)
-	return s.reminderRepo.UpdateSnooze(ctx, id, &snoozeUntil)
+	return s.reminderRepo.UpdateSnooze(ctx, id, snoozeUntil.Format(time.RFC3339))
 }
 
 // CompleteReminder marks a reminder as completed
