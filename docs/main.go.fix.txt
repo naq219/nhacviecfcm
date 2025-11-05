@@ -36,9 +36,9 @@ import (
 //	@license.name	Apache 2.0
 //	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
 
-//	@host		localhost:8090
-//	@basePath	/
-//	@schemes	http https
+//	@host			localhost:8090
+//	@basePath		/
+//	@schemes		http https
 
 //	@securityDefinitions.basic	BasicAuth
 //	@securityDefinitions.apikey	BearerAuth
@@ -113,7 +113,7 @@ func main() {
 			return re.String(200, "RemiAq API is running!")
 		})
 
-		// Raw SQL query endpoints
+		// Raw SQL query endpoints (public, no auth required)
 		se.Router.GET("/api/rquery", queryHandler.HandleSelect)
 		se.Router.POST("/api/rquery", queryHandler.HandleSelect)
 
@@ -126,30 +126,22 @@ func main() {
 		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
 		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
 
-		// // --- Temporary/Public endpoints ---
-		// tmpApi := se.Router.Group("/api/tmp")
-		// tmpApi.POST("/reminders", reminderHandler.CreateReminder)
-		// tmpApi.GET("/reminders/{id}", reminderHandler.GetReminder)
-		// tmpApi.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
-		// tmpApi.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
-		// tmpApi.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
-		// tmpApi.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-		// tmpApi.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
+		// System status API (public, no auth required)
+		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
+		se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
 
-		// --- Auth-protected endpoints (PocketBase built-in auth) ---
-		api := se.Router.Group("/api")
+		// --- Auth-protected custom API endpoints ---
+		// Use /api/app prefix to avoid conflicts with PocketBase built-in /api/collections/* routes
+		api := se.Router.Group("/api/app")
 		api.Bind(apis.RequireAuth())
+		
 		api.POST("/reminders", reminderHandler.CreateReminder)
 		api.GET("/reminders/{id}", reminderHandler.GetReminder)
 		api.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
 		api.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
-		api.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		api.GET("/reminders", reminderHandler.GetCurrentUserReminders)
 		api.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
 		api.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
-
-		// System status API
-		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
-		se.Router.PUT("/api/system_status", sysHandler.PutSystemStatus)
 
 		// HTML test pages
 		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {

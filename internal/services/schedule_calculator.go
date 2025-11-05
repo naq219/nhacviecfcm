@@ -72,10 +72,16 @@ func (c *ScheduleCalculator) calculateIntervalBased(reminder *models.Reminder, f
 
 	// If base_on is completion, calculate from completion time
 	if reminder.RecurrencePattern.BaseOn == models.BaseOnCompletion {
-		if reminder.LastCompletedAt != nil {
-			return reminder.LastCompletedAt.Add(interval), nil
+		// 🔧 FIX: Parse string to time.Time
+		if reminder.LastCompletedAt != "" {
+			lastCompleted, err := time.Parse(time.RFC3339, reminder.LastCompletedAt)
+			if err != nil {
+				// Fallback to creation time if parse fails
+				return reminder.Created.Add(interval), nil
+			}
+			return lastCompleted.Add(interval), nil
 		}
-		// If never completed, use creation time
+		// If never completed (empty string), use creation time
 		return reminder.Created.Add(interval), nil
 	}
 

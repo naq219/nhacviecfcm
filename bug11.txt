@@ -1,0 +1,124 @@
+# File: d:\PROJECT\nhacviecfcm\internal\handlers\reminder_handler.go
+# Chú thích: Đoạn mã này xử lý yêu cầu HTTP POST để tạo lời nhắc mới.
+# Nó giải mã JSON từ request body thành đối tượng models.Reminder và sau đó gọi hàm CreateReminder của service.
+# Vấn đề NOT NULL xảy ra khi các trường ngày tháng như snooze_until, last_completed_at, last_sent_at không được cung cấp giá trị trong request body, dẫn đến việc chúng có giá trị zero của time.Time và gây lỗi khi chèn vào DB.
+
+```go
+// CreateReminder handles POST /api/reminders
+func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	var reminder models.Reminder
+	if err := json.NewDecoder(re.Request.Body).Decode(&reminder); err != nil {
+		return utils.SendError(re, 400, "Invalid request body", err)
+	}
+
+	// Create reminder
+	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
+		return utils.SendError(re, 400, "Failed to create reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder created successfully", reminder)
+}
+```
+
+---
+
+# File: d:\PROJECT\nhacviecfcm\internal\services\reminder_service.go
+# Chú thích: Đoạn mã này chứa logic nghiệp vụ để tạo lời nhắc.
+# Nó thực hiện xác thực, tạo ID nếu chưa có, và thiết lập các giá trị mặc định cho một số trường.
+# Sau đó, nó gọi hàm Create của repository để lưu lời nhắc vào cơ sở dữ liệu.
+# Các trường snooze_until, last_completed_at, last_sent_at không được xử lý đặc biệt ở đây,
+# chúng được truyền nguyên trạng từ handler xuống repository.
+
+```go
+// CreateReminder creates a new reminder
+func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.Reminder) error {
+	// Validate
+	if err := reminder.Validate(); err != nil {
+		return err
+	}
+
+	// Generate ID if not provided
+	if reminder.ID == "" {
+		reminder.ID = uuid.New().String()
+	}
+
+	// Set default values
+	if reminder.Status == "" {
+		reminder.Status = models.ReminderStatusActive
+	}
+	if reminder.RepeatStrategy == "" {
+		reminder.RepeatStrategy = models.RepeatStrategyNone
+	}
+	if reminder.CalendarType == "" {
+		reminder.CalendarType = models.CalendarTypeSolar
+	}
+
+	// Calculate next trigger time if not set
+	if reminder.NextTriggerAt.IsZero() {
+		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, time.Now())
+		if err != nil {
+			return err
+		}
+		reminder.NextTriggerAt = nextTrigger
+	}
+
+	// Các trường snooze_until, last_completed_at, last_sent_at được truyền trực tiếp
+	// từ đối tượng reminder vào repository. Nếu chúng là time.Time{} (zero value)
+	// và cột trong DB là NOT NULL, sẽ gây lỗi.
+	return s.reminderRepo.Create(ctx, reminder)
+}
+```
+
+---
+
+# File: d:\PROJECT\nhacviecfcm\internal\repository\pocketbase\reminder_repo.go
+# Chú thích: Đoạn mã này chịu trách nhiệm tương tác trực tiếp với cơ sở dữ liệu PocketBase.
+# Nó xây dựng câu lệnh SQL INSERT và thực thi nó.
+# Các giá trị cho các trường được lấy từ đối tượng models.Reminder và truyền vào câu lệnh SQL.
+# Đây là nơi lỗi NOT NULL thực sự xảy ra khi PocketBase cố gắng chèn giá trị zero của time.Time
+# vào các cột được định nghĩa là NOT NULL trong schema.
+
+```go
+func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) error {
+	patternJSON, _ := json.Marshal(reminder.RecurrencePattern)
+
+	query := `
+        INSERT INTO reminders (
+            id, user_id, title, description, type, calendar_type,
+            next_trigger_at, trigger_time_of_day, recurrence_pattern,
+            repeat_strategy, retry_interval_sec, max_retries, status,
+            snooze_until, last_completed_at, last_sent_at,
+            created, updated
+        ) VALUES (
+            {:id}, {:user_id}, {:title}, {:description}, {:type}, {:calendar_type},
+            {:next_trigger_at}, {:trigger_time_of_day}, {:recurrence_pattern},
+            {:repeat_strategy}, {:retry_interval_sec}, {:max_retries}, {:status},
+            {:snooze_until}, {:last_completed_at}, {:last_sent_at},
+            {:created}, {:updated}
+        )
+    `
+
+	return r.helper.Exec(query, dbx.Params{
+		"id":                  reminder.ID,
+		"user_id":             reminder.UserID,
+		"title":               reminder.Title,
+		"description":         reminder.Description,
+		"type":                reminder.Type,
+		"calendar_type":       reminder.CalendarType,
+		"next_trigger_at":     reminder.NextTriggerAt,
+		"trigger_time_of_day": reminder.TriggerTimeOfDay,
+		"recurrence_pattern":  string(patternJSON),
+		"repeat_strategy":     reminder.RepeatStrategy,
+		"retry_interval_sec":  reminder.RetryIntervalSec,
+		"max_retries":         reminder.MaxRetries,
+		"status":              reminder.Status,
+		"snooze_until":        reminder.SnoozeUntil,       # <-- Nếu reminder.SnoozeUntil là time.Time{} và cột DB là NOT NULL, sẽ lỗi
+		"last_completed_at":   reminder.LastCompletedAt,   # <-- Tương tự
+		"last_sent_at":        reminder.LastSentAt,        # <-- Tương tự
+		"created":             reminder.Created,
+		"updated":             reminder.Updated,
+	})
+}
+```

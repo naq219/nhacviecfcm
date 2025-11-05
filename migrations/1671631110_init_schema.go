@@ -25,6 +25,11 @@ func init() {
 
 		// Create musers collection (auth type)
 		musersCollection := core.NewAuthCollection("musers")
+		musersCollection.ListRule = types.Pointer("id = @request.auth.id")
+		musersCollection.ViewRule = types.Pointer("id = @request.auth.id")
+		musersCollection.CreateRule = types.Pointer("")
+		musersCollection.DeleteRule = types.Pointer("id = @request.auth.id")
+		musersCollection.UpdateRule = types.Pointer("id = @request.auth.id")
 
 		// Add custom fields to musers
 		musersCollection.Fields.Add(&core.TextField{

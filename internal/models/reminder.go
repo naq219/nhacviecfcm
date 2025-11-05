@@ -20,9 +20,9 @@ type Reminder struct {
 	MaxRetries        int                `json:"max_retries" db:"max_retries"`
 	RetryCount        int                `json:"retry_count" db:"retry_count"`
 	Status            string             `json:"status" db:"status"` // active, completed, paused
-	SnoozeUntil       *time.Time         `json:"snooze_until" db:"snooze_until"`
-	LastCompletedAt   *time.Time         `json:"last_completed_at" db:"last_completed_at"`
-	LastSentAt        *time.Time         `json:"last_sent_at" db:"last_sent_at"`
+	SnoozeUntil       string             `json:"snooze_until" db:"snooze_until"`
+	LastCompletedAt   string             `json:"last_completed_at" db:"last_completed_at"`
+	LastSentAt        string             `json:"last_sent_at" db:"last_sent_at"`
 	Created           time.Time          `json:"created" db:"created"`
 	Updated           time.Time          `json:"updated" db:"updated"`
 }
@@ -129,9 +129,12 @@ func (r *Reminder) ShouldSend(now time.Time) bool {
 		return false
 	}
 
-	// Check snooze
-	if r.SnoozeUntil != nil && now.Before(*r.SnoozeUntil) {
-		return false
+	// 🔧 FIX: Check snooze - parse string to time.Time
+	if r.SnoozeUntil != "" {
+		snoozeTime, err := time.Parse(time.RFC3339, r.SnoozeUntil)
+		if err == nil && now.Before(snoozeTime) {
+			return false
+		}
 	}
 
 	// Check trigger time

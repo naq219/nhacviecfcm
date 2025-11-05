@@ -123,13 +123,13 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 		}
 
 		// Update last_completed_at and next_trigger_at
-		reminder.LastCompletedAt = &now
+		reminder.LastCompletedAt = now.Format(time.RFC3339)
 		reminder.NextTriggerAt = nextTrigger
 		return s.reminderRepo.Update(ctx, reminder)
 	}
 
 	// For other recurring reminders, just update last_completed_at
-	reminder.LastCompletedAt = &now
+	reminder.LastCompletedAt = now.Format(time.RFC3339)
 	return s.reminderRepo.Update(ctx, reminder)
 }
 
