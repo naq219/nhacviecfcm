@@ -172,13 +172,13 @@ func (r *ReminderRepo) IncrementRetryCount(ctx context.Context, id string) error
 		})
 }
 
-func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt time.Time) error {
+func (r *ReminderRepo) MarkCompleted(ctx context.Context, id string, completedAt string) error {
 	return r.helper.Exec(
 		"UPDATE reminders SET status = {:status}, last_completed_at = {:completed_at}, updated = {:updated} WHERE id = {:id}",
 		dbx.Params{
 			"status":       "completed",
 			"completed_at": completedAt,
-			"updated":      time.Now(),
+			"updated":      time.Now().UTC(),
 			"id":           id,
 		})
 }
@@ -195,12 +195,12 @@ func (r *ReminderRepo) UpdateSnooze(ctx context.Context, id string, snoozeUntil 
 	)
 }
 
-func (r *ReminderRepo) UpdateLastSent(ctx context.Context, id string, sentAt time.Time) error {
+func (r *ReminderRepo) UpdateLastSent(ctx context.Context, id string, lastSentAt string) error {
 	return r.helper.Exec(
 		"UPDATE reminders SET last_sent_at = {:sent_at}, updated = {:updated} WHERE id = {:id}",
 		dbx.Params{
-			"sent_at": sentAt,
-			"updated": time.Now(),
+			"sent_at": lastSentAt,
+			"updated": time.Now().UTC(),
 			"id":      id,
 		})
 }

@@ -110,7 +110,7 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 
 	// For one-time reminders, mark as completed
 	if reminder.Type == models.ReminderTypeOneTime {
-		return s.reminderRepo.MarkCompleted(ctx, id, now)
+		return s.reminderRepo.MarkCompleted(ctx, id, now.Format(time.RFC3339))
 	}
 
 	// For recurring reminders with base_on=completion
@@ -190,7 +190,7 @@ func (s *ReminderService) processReminder(ctx context.Context, reminder *models.
 		}
 
 		// Update last_sent_at only when we actually sent something
-		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now)
+		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now.Format(time.RFC3339))
 	}
 
 	// Handle based on type
@@ -214,7 +214,7 @@ func (s *ReminderService) handleOneTimeReminder(ctx context.Context, reminder *m
 	}
 
 	// Otherwise, mark as completed
-	return s.reminderRepo.MarkCompleted(ctx, reminder.ID, now)
+	return s.reminderRepo.MarkCompleted(ctx, reminder.ID, now.Format(time.RFC3339))
 }
 
 // handleRecurringReminder handles recurring reminder logic

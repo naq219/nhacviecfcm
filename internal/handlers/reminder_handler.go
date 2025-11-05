@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"remiaq/internal/middleware"
@@ -40,10 +41,17 @@ func NewReminderHandler(reminderService ReminderServiceInterface) *ReminderHandl
 func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
+	authRecord := re.Auth
+	if authRecord == nil {
+		return utils.SendError(re, 401, "Unauthorized", errors.New("user not authenticated"))
+	}
+
 	var reminder models.Reminder
 	if err := json.NewDecoder(re.Request.Body).Decode(&reminder); err != nil {
 		return utils.SendError(re, 400, "Invalid request body", err)
 	}
+
+	reminder.UserID = authRecord.Id
 
 	// Create reminder
 	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
