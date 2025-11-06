@@ -162,6 +162,11 @@ func mapFieldValue(fieldVal reflect.Value, fieldType reflect.Type, value string,
 // Supports: RFC3339Nano, RFC3339, ISO format, SQL datetime, PocketBase DateTime, and Go time.String() format.
 // Returns error if none of the formats match.
 func parseTime(value string) (time.Time, error) {
+	// Handle empty or null values
+	if value == "" {
+		return time.Time{}, nil
+	}
+
 	formats := []string{
 		time.RFC3339Nano,
 		time.RFC3339,

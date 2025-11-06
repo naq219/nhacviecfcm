@@ -349,3 +349,4 @@ import (
 This comprehensive rule set ensures consistency, maintainability, and quality across the RemiAq project while leveraging the strengths of Go and PocketBase.
 
 các table có created và updated không cần phải insert, pocketbase tự động insert cho rồi
+chạy lệnh không dùng && để tránh lỗi, ví dụ cd d:\PROJECT\nhacviecfcm && go run test_parse.go sẽ lỗi trên windows
