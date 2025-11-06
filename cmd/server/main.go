@@ -61,9 +61,9 @@ func main() {
 	// Create PocketBase instance
 	app := pocketbase.New()
 
-	// Initialize repositories
-	reminderRepo := pbRepo.NewReminderRepo(app)
-	userRepo := pbRepo.NewUserRepo(app)
+	// Initialize repositories (using ORM implementations)
+	reminderRepo := pbRepo.NewReminderORMRepo(app)
+	userRepo := pbRepo.NewUserORMRepo(app)
 	queryRepo := pbRepo.NewQueryRepo(app)
 
 	// Initialize services
@@ -86,7 +86,7 @@ func main() {
 	queryHandler := handlers.NewQueryHandler(queryRepo)
 
 	// Initialize system status repo and start background worker
-	sysRepo := pbRepo.NewSystemStatusRepo(app)
+	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
