@@ -9,6 +9,13 @@ import (
 	"google.golang.org/api/option"
 )
 
+// FCMServiceInterface defines the interface for FCM service
+type FCMServiceInterface interface {
+	SendNotification(token, title, body string) error
+	SendNotificationWithData(token, title, body string, data map[string]string) error
+	SendMulticast(tokens []string, title, body string) (*messaging.BatchResponse, error)
+}
+
 // FCMService handles Firebase Cloud Messaging
 type FCMService struct {
 	client *messaging.Client

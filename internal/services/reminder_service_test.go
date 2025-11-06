@@ -175,7 +175,7 @@ func TestReminderService_CreateReminder(t *testing.T) {
 		service := NewReminderService(reminderRepo, userRepo, nil, schedCalculator)
 
 		reminder := createTestReminder()
-		reminder.ID = "" // Test ID generation
+		reminder.ID = ""            // Test ID generation
 		reminder.NextTriggerAt = "" // Test next trigger calculation
 
 		reminderRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil)
@@ -283,23 +283,24 @@ func TestReminderService_ProcessDueReminders(t *testing.T) {
 	t.Run("should process due reminders successfully", func(t *testing.T) {
 		reminderRepo := &MockReminderRepository{}
 		userRepo := &MockUserRepository{}
-		_ = NewMockFCMService() // fcmService
-		service := NewReminderService(reminderRepo, userRepo, nil, NewScheduleCalculator(NewLunarCalendar()))
+		fcmService := NewMockFCMService()
+		service := NewReminderService(reminderRepo, userRepo, fcmService, NewScheduleCalculator(NewLunarCalendar()))
 
-		_ = time.Now() // now
 		reminder := createTestReminder()
 		user := createTestUser()
 
 		reminderRepo.On("GetDueReminders", mock.Anything, mock.AnythingOfType("time.Time")).Return([]*models.Reminder{reminder}, nil)
 		userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
-		// Only expect MarkCompleted for one-time reminder (no FCM service configured)
-		reminderRepo.On("MarkCompleted", mock.Anything, "test-id", mock.AnythingOfType("string")).Return(nil)
+		fcmService.On("SendNotification", user.FCMToken, reminder.Title, reminder.Description).Return(nil)
+		reminderRepo.On("UpdateLastSent", mock.Anything, "test-id", mock.AnythingOfType("string")).Return(nil)
+		reminderRepo.On("Update", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil)
 
 		err := service.ProcessDueReminders(context.Background())
 
 		assert.NoError(t, err)
 		reminderRepo.AssertExpectations(t)
 		userRepo.AssertExpectations(t)
+		fcmService.AssertExpectations(t)
 	})
 
 	t.Run("should handle FCM errors gracefully", func(t *testing.T) {

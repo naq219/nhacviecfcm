@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"firebase.google.com/go/v4/messaging"
@@ -27,48 +27,51 @@ func (m *MockMessagingClient) SendEachForMulticast(ctx context.Context, message 
 
 // MockFCMService for testing
 type MockFCMService struct {
-	client *MockMessagingClient
+	mock.Mock
 }
 
 func NewMockFCMService() *MockFCMService {
-	return &MockFCMService{
-		client: &MockMessagingClient{},
-	}
+	return &MockFCMService{}
 }
 
-func (s *MockFCMService) SendNotification(token, title, body string) error {
-	if token == "" {
-		return fmt.Errorf("token cannot be empty")
-	}
-	
-	// Mock successful send
-	s.client.On("Send", mock.Anything, mock.Anything).Return("message-id", nil)
-	_, err := s.client.Send(context.Background(), &messaging.Message{
-		Token: token,
-		Notification: &messaging.Notification{
-			Title: title,
-			Body:  body,
-		},
-	})
-	return err
+func (m *MockFCMService) SendNotification(token, title, body string) error {
+	args := m.Called(token, title, body)
+	return args.Error(0)
 }
+
+func (m *MockFCMService) SendNotificationWithData(token, title, body string, data map[string]string) error {
+	args := m.Called(token, title, body, data)
+	return args.Error(0)
+}
+
+func (m *MockFCMService) SendMulticast(tokens []string, title, body string) (*messaging.BatchResponse, error) {
+	args := m.Called(tokens, title, body)
+	return args.Get(0).(*messaging.BatchResponse), args.Error(1)
+}
+
+// Ensure MockFCMService implements the interface
+var _ FCMServiceInterface = (*MockFCMService)(nil)
 
 func TestFCMService_SendNotification(t *testing.T) {
 	t.Run("should return error for empty token", func(t *testing.T) {
 		service := NewMockFCMService()
+		service.On("SendNotification", "", "Test Title", "Test Body").Return(errors.New("token is empty"))
 		
 		err := service.SendNotification("", "Test Title", "Test Body")
 		
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "token")
+		service.AssertExpectations(t)
 	})
 	
 	t.Run("should send notification successfully", func(t *testing.T) {
 		service := NewMockFCMService()
+		service.On("SendNotification", "valid-token", "Test Title", "Test Body").Return(nil)
 		
 		err := service.SendNotification("valid-token", "Test Title", "Test Body")
 		
 		assert.NoError(t, err)
+		service.AssertExpectations(t)
 	})
 }
 

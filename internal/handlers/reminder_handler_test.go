@@ -93,11 +93,16 @@ func createReminderMockRequestEvent(method, path string, body interface{}) *core
 
 	recorder := httptest.NewRecorder()
 
+	// Create mock auth record
+	// Create empty core.Record for testing - we only need it to be non-null
+	authRecord := &core.Record{}
+
 	re := &core.RequestEvent{
 		Event: router.Event{
 			Request:  req,
 			Response: recorder,
 		},
+		Auth: authRecord,
 	}
 
 	return re

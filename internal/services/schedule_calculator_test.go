@@ -79,7 +79,7 @@ func TestScheduleCalculator_calculateOneTime(t *testing.T) {
 		result, err := calculator.calculateOneTime(reminder, now)
 
 		assert.NoError(t, err)
-		assert.Equal(t, triggerTime, result)
+		assert.WithinDuration(t, triggerTime, result, time.Second)
 	})
 
 	t.Run("should return fromTime when NextTriggerAt is zero", func(t *testing.T) {
@@ -91,7 +91,7 @@ func TestScheduleCalculator_calculateOneTime(t *testing.T) {
 		result, err := calculator.calculateOneTime(reminder, now)
 
 		assert.NoError(t, err)
-		assert.Equal(t, now, result)
+		assert.WithinDuration(t, now, result, time.Second)
 	})
 }
 

@@ -16,7 +16,7 @@ import (
 type ReminderService struct {
 	reminderRepo    repository.ReminderRepository
 	userRepo        repository.UserRepository
-	fcmService      *FCMService
+	fcmService      FCMServiceInterface
 	schedCalculator *ScheduleCalculator
 }
 
@@ -24,7 +24,7 @@ type ReminderService struct {
 func NewReminderService(
 	reminderRepo repository.ReminderRepository,
 	userRepo repository.UserRepository,
-	fcmService *FCMService,
+	fcmService FCMServiceInterface,
 	schedCalculator *ScheduleCalculator,
 ) *ReminderService {
 	return &ReminderService{
