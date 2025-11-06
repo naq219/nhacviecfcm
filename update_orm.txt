@@ -1,0 +1,277 @@
+# DANH SÁCH FILE CẦN SỬA ĐỔI ĐỂ CHUYỂN SANG ORM REPOSITORY
+
+## 1. File Repository Interface & Implementation
+---- start file internal/repository/interface.go----
+package repository
+
+import (
+	"context"
+	"time"
+
+	"remiaq/internal/models"
+)
+
+// ReminderRepository defines operations for reminder data access
+type ReminderRepository interface {
+	// CRUD operations
+	Create(ctx context.Context, reminder *models.Reminder) error
+	GetByID(ctx context.Context, id string) (*models.Reminder, error)
+	Update(ctx context.Context, reminder *models.Reminder) error
+	Delete(ctx context.Context, id string) error
+
+	// Query operations
+	GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error)
+	GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error)
+
+	// Specific updates
+	UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error
+	UpdateStatus(ctx context.Context, id string, status string) error
+	IncrementRetryCount(ctx context.Context, id string) error
+	UpdateSnooze(ctx context.Context, id string, snoozeUntil string) error
+	MarkCompleted(ctx context.Context, id string, completedAt string) error
+	UpdateLastSent(ctx context.Context, id string, lastSentAt string) error
+}
+-----end file internal/repository/interface.go-----
+
+---- start file internal/repository/pocketbase/reminder_orm_repo.go----
+package pocketbase
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// ReminderORMRepo implements ReminderRepository using PocketBase ORM
+type ReminderORMRepo struct {
+	app *pocketbase.PocketBase
+}
+
+var _ repository.ReminderRepository = (*ReminderORMRepo)(nil)
+
+func NewReminderORMRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
+	return &ReminderORMRepo{app: app}
+}
+
+// ... implementation methods using app.DB().NewQuery(), Bind(), One(), All(), Execute()
+-----end file internal/repository/pocketbase/reminder_orm_repo.go-----
+
+## 2. File Repository SQL hiện tại (có thể giữ làm backup)
+---- start file internal/repository/pocketbase/reminder_repo.go----
+package pocketbase
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"remiaq/internal/db"
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// ReminderRepo implements ReminderRepository using SQL queries
+type ReminderRepo struct {
+	helper db.DBHelperInterface
+}
+
+var _ repository.ReminderRepository = (*ReminderRepo)(nil)
+
+func NewReminderRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
+	return &ReminderRepo{helper: db.NewDBHelper(app)}
+}
+
+// ... implementation methods using db helper functions
+-----end file internal/repository/pocketbase/reminder_repo.go-----
+
+## 3. File Services sử dụng Repository
+---- start file internal/services/reminder_service.go----
+package services
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+)
+
+// ReminderService handles reminder business logic
+type ReminderService struct {
+	reminderRepo    repository.ReminderRepository
+	userRepo        repository.UserRepository
+	fcmService      FCMServiceInterface
+	schedCalculator *ScheduleCalculator
+}
+
+func NewReminderService(
+	reminderRepo repository.ReminderRepository,
+	userRepo repository.UserRepository,
+	fcmService FCMServiceInterface,
+	schedCalculator *ScheduleCalculator,
+) *ReminderService {
+	return &ReminderService{
+		reminderRepo:    reminderRepo,
+		userRepo:        userRepo,
+		fcmService:      fcmService,
+		schedCalculator: schedCalculator,
+	}
+}
+-----end file internal/services/reminder_service.go-----
+
+## 4. File Main Application
+---- start file cmd/server/main.go----
+package main
+
+import (
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"remiaq/internal/handlers"
+	"remiaq/internal/repository"
+	pbRepo "remiaq/internal/repository/pocketbase"
+	"remiaq/internal/services"
+	"remiaq/internal/worker"
+
+	"github.com/pocketbase/pocketbase"
+)
+
+func main() {
+	app := pocketbase.New()
+
+	// Initialize repositories
+	reminderRepo := pbRepo.NewReminderRepo(app) // Cần đổi thành NewReminderORMRepo
+	userRepo := pbRepo.NewUserRepo(app)
+	systemStatusRepo := pbRepo.NewSystemStatusRepo(app)
+	queryRepo := pbRepo.NewQueryRepo(app)
+
+	// Initialize services
+	fcmService := services.NewFCMService()
+	schedCalculator := services.NewScheduleCalculator()
+	reminderService := services.NewReminderService(
+		reminderRepo,
+		userRepo,
+		fcmService,
+		schedCalculator,
+	)
+
+	// ... rest of the code
+}
+-----end file cmd/server/main.go-----
+
+## 5. File Worker sử dụng Service
+---- start file internal/worker/worker.go----
+package worker
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"remiaq/internal/repository"
+	"remiaq/internal/services"
+)
+
+type Worker struct {
+	reminderService *services.ReminderService
+	systemStatusRepo repository.SystemStatusRepository
+	interval         time.Duration
+}
+
+func NewWorker(
+	reminderService *services.ReminderService,
+	systemStatusRepo repository.SystemStatusRepository,
+	interval time.Duration,
+) *Worker {
+	return &Worker{
+		reminderService: reminderService,
+		systemStatusRepo: systemStatusRepo,
+		interval:         interval,
+	}
+}
+-----end file internal/worker/worker.go-----
+
+## 6. Các Repository khác cần cập nhật tương tự
+---- start file internal/repository/pocketbase/user_repo.go----
+package pocketbase
+
+import (
+	"context"
+	"time"
+
+	"remiaq/internal/db"
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+)
+
+// UserRepo implements UserRepository
+type UserRepo struct {
+	helper db.DBHelperInterface
+}
+
+var _ repository.UserRepository = (*UserRepo)(nil)
+
+func NewUserRepo(app *pocketbase.PocketBase) repository.UserRepository {
+	return &UserRepo{helper: db.NewDBHelper(app)}
+}
+-----end file internal/repository/pocketbase/user_repo.go-----
+
+---- start file internal/repository/pocketbase/system_status_repo.go----
+package pocketbase
+
+import (
+	"context"
+	"time"
+
+	"remiaq/internal/db"
+	"remiaq/internal/models"
+	"remiaq/internal/repository"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+)
+
+// SystemStatusRepo implements SystemStatusRepository
+type SystemStatusRepo struct {
+	helper db.DBHelperInterface
+}
+
+var _ repository.SystemStatusRepository = (*SystemStatusRepo)(nil)
+
+func NewSystemStatusRepo(app *pocketbase.PocketBase) repository.SystemStatusRepository {
+	return &SystemStatusRepo{helper: db.NewDBHelper(app)}
+}
+-----end file internal/repository/pocketbase/system_status_repo.go-----
+
+## KẾ HOẠCH THỰC HIỆN:
+1. Cập nhật test cases cho ORM repository hiện tại
+2. Thay thế repository trong main.go từ SQL sang ORM
+3. Cập nhật các service để sử dụng ORM repository
+4. Chạy test toàn bộ hệ thống
+5. Cập nhật các repository khác theo mô hình ORM
+
+## LƯU Ý QUAN TRỌNG:
+- Thay thế dbx.Params bằng map[string]interface{}
+- Sử dụng app.DB().NewQuery() thay vì db helper functions
+- Cập nhật mock helpers cho testing
+- Đảm bảo backward compatibility với interface hiện tại
