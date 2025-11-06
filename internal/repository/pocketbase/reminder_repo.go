@@ -26,18 +26,19 @@ func NewReminderRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
 
 func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) error {
 	patternJSON, _ := json.Marshal(reminder.RecurrencePattern)
+	now := time.Now().UTC()
 
 	query := `
         INSERT INTO reminders (
             id, user_id, title, description, type, calendar_type,
             next_trigger_at, trigger_time_of_day, recurrence_pattern,
             repeat_strategy, retry_interval_sec, max_retries, status,
-            snooze_until, last_completed_at, last_sent_at
+            snooze_until, last_completed_at, last_sent_at, created, updated
         ) VALUES (
             {:id}, {:user_id}, {:title}, {:description}, {:type}, {:calendar_type},
             {:next_trigger_at}, {:trigger_time_of_day}, {:recurrence_pattern},
             {:repeat_strategy}, {:retry_interval_sec}, {:max_retries}, {:status},
-            {:snooze_until}, {:last_completed_at}, {:last_sent_at}
+            {:snooze_until}, {:last_completed_at}, {:last_sent_at}, {:created}, {:updated}
         )
     `
 
@@ -58,6 +59,8 @@ func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) er
 		"snooze_until":        reminder.SnoozeUntil,
 		"last_completed_at":   reminder.LastCompletedAt,
 		"last_sent_at":        reminder.LastSentAt,
+		"created":             now.Format(time.RFC3339),
+		"updated":             now.Format(time.RFC3339),
 	})
 }
 
