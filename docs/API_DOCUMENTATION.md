@@ -12,7 +12,7 @@ The API provides functionalities for managing reminders, checking system status,
 
 Most endpoints are protected and require authentication. The API uses PocketBase's built-in token-based authentication.
 
-To authenticate, you need to obtain a token from the PocketBase authentication endpoint (e.g., `/api/collections/users/auth-with-password`) and include it in the `Authorization` header for subsequent requests.
+To authenticate, you need to obtain a token from the PocketBase authentication endpoint (e.g., `/api/collections/musers/auth-with-password`) and include it in the `Authorization` header for subsequent requests.
 
 **Header Format**:
 ```

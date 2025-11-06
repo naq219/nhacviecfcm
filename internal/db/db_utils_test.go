@@ -28,7 +28,7 @@ func TestGetOne_SuccessMapping(t *testing.T) {
 			},
 		}
 
-		result, err := GetOne[models.User](mockHelper, "SELECT * FROM users WHERE id = ?", dbx.Params{})
+		result, err := GetOne[models.User](mockHelper, "SELECT * FROM musers WHERE id = ?", dbx.Params{})
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "user123", result.ID)
@@ -71,7 +71,7 @@ func TestGetOne_MappingErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetOne[models.User](mockHelper, "SELECT * FROM users", dbx.Params{})
+		result, err := GetOne[models.User](mockHelper, "SELECT * FROM musers", dbx.Params{})
 		require.NoError(t, err, "mapper allows missing fields - uses zero values")
 		require.NotNil(t, result)
 		assert.Equal(t, "", result.ID) // Empty string for missing string field
@@ -128,7 +128,7 @@ func TestGetOne_MappingErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetOne[models.User](mockHelper, "SELECT * FROM users", dbx.Params{})
+		result, err := GetOne[models.User](mockHelper, "SELECT * FROM musers", dbx.Params{})
 		assert.Error(t, err, "should error on invalid time format")
 		assert.Nil(t, result)
 		// Error message uses field name not db tag
@@ -181,7 +181,7 @@ func TestGetAll_MappingErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetAll[models.User](mockHelper, "SELECT * FROM users", dbx.Params{})
+		result, err := GetAll[models.User](mockHelper, "SELECT * FROM musers", dbx.Params{})
 		assert.Error(t, err, "should error when any row fails mapping")
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "row 1") // Error on row 2 (0-indexed = row 1)
@@ -211,7 +211,7 @@ func TestGetAll_MappingErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetAll[models.User](mockHelper, "SELECT * FROM users", dbx.Params{})
+		result, err := GetAll[models.User](mockHelper, "SELECT * FROM musers", dbx.Params{})
 		require.NoError(t, err)
 		require.Len(t, result, 2)
 		assert.Equal(t, "user1", result[0].ID)
@@ -228,7 +228,7 @@ func TestGetOne_DatabaseErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetOne[models.User](mockHelper, "SELECT * FROM users", dbx.Params{})
+		result, err := GetOne[models.User](mockHelper, "SELECT * FROM musers", dbx.Params{})
 		require.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "database connection lost")
@@ -241,7 +241,7 @@ func TestGetOne_DatabaseErrors(t *testing.T) {
 			},
 		}
 
-		result, err := GetOne[models.User](mockHelper, "SELECT * FROM users WHERE id = ?", dbx.Params{})
+		result, err := GetOne[models.User](mockHelper, "SELECT * FROM musers WHERE id = ?", dbx.Params{})
 		require.Error(t, err)
 		assert.Nil(t, result)
 	})

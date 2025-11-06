@@ -140,6 +140,7 @@ func main() {
 		api := se.Router.Group("/api")
 		api.Bind(apis.RequireAuth())
 		api.POST("/reminders", reminderHandler.CreateReminder)
+		api.GET("/reminders/mine", reminderHandler.GetCurrentUserReminders) // New route
 		api.GET("/reminders/{id}", reminderHandler.GetReminder)
 		api.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
 		api.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)

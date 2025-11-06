@@ -134,6 +134,23 @@ func (h *ReminderHandler) GetUserReminders(re *core.RequestEvent) error {
 	return utils.SendSuccess(re, "", reminders)
 }
 
+// GetCurrentUserReminders handles GET /api/reminders/mine
+func (h *ReminderHandler) GetCurrentUserReminders(re *core.RequestEvent) error {
+	middleware.SetCORSHeaders(re)
+
+	authRecord := re.Auth
+	if authRecord == nil {
+		return utils.SendError(re, 401, "Unauthorized", errors.New("user not authenticated"))
+	}
+
+	reminders, err := h.reminderService.GetUserReminders(re.Request.Context(), authRecord.Id)
+	if err != nil {
+		return utils.SendError(re, 400, "Failed to get reminders", err)
+	}
+
+	return utils.SendSuccess(re, "", reminders)
+}
+
 // SnoozeReminder handles POST /api/reminders/:id/snooze
 func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)

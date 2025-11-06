@@ -55,6 +55,14 @@ func (m *MockReminderService) GetUserReminders(ctx context.Context, userID strin
 	return args.Get(0).([]*models.Reminder), args.Error(1)
 }
 
+func (m *MockReminderService) GetCurrentUserReminders(ctx context.Context, userID string) ([]*models.Reminder, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Reminder), args.Error(1)
+}
+
 func (m *MockReminderService) SnoozeReminder(ctx context.Context, id string, duration time.Duration) error {
 	args := m.Called(ctx, id, duration)
 	return args.Error(0)
@@ -646,6 +654,7 @@ func TestSnoozeReminder(t *testing.T) {
 			err := handler.SnoozeReminder(re)
 
 			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, re.Event.Response.(*httptest.ResponseRecorder).Code)
 		})
 	}
 }

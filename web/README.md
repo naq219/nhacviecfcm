@@ -55,7 +55,7 @@ Website đã chuẩn bị sẵn các hàm để tích hợp với backend:
 ```javascript
 // Đăng nhập
 async login() {
-    const response = await fetch('/api/collections/users/auth-with-password', {
+    const response = await fetch('/api/collections/musers/auth-with-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
