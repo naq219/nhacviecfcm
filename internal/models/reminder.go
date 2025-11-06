@@ -29,11 +29,12 @@ type Reminder struct {
 
 // RecurrencePattern defines how a reminder repeats
 type RecurrencePattern struct {
-	Type            string `json:"type"`                       // daily, weekly, monthly, lunar_last_day_of_month
-	IntervalSeconds int    `json:"interval_seconds,omitempty"` // For interval-based recurrence
-	DayOfMonth      int    `json:"day_of_month,omitempty"`     // For monthly recurrence
-	DayOfWeek       int    `json:"day_of_week,omitempty"`      // For weekly recurrence (0=Sunday)
-	BaseOn          string `json:"base_on,omitempty"`          // creation, completion
+	Type     string `json:"type"`                   // daily, weekly, monthly, lunar_last_day_of_month
+	Frequency string `json:"frequency,omitempty"`    // minute, hour, day, week, month
+	Interval  int    `json:"interval,omitempty"`     // For interval-based recurrence
+	DayOfMonth int    `json:"day_of_month,omitempty"` // For monthly recurrence
+	DayOfWeek  int    `json:"day_of_week,omitempty"`   // For weekly recurrence (0=Sunday)
+	BaseOn     string `json:"base_on,omitempty"`      // creation, completion
 }
 
 // User represents a user with FCM token

@@ -19,6 +19,24 @@ func NewScheduleCalculator(lunarCalendar *LunarCalendar) *ScheduleCalculator {
 	}
 }
 
+// convertFrequencyToSeconds converts frequency and interval to seconds
+func (c *ScheduleCalculator) convertFrequencyToSeconds(frequency string, interval int) int {
+	switch frequency {
+	case "minute":
+		return interval * 60
+	case "hour":
+		return interval * 60 * 60
+	case "day":
+		return interval * 24 * 60 * 60
+	case "week":
+		return interval * 7 * 24 * 60 * 60
+	case "month":
+		return interval * 30 * 24 * 60 * 60 // Approximate 30 days per month
+	default:
+		return 0
+	}
+}
+
 // CalculateNextTrigger calculates the next trigger time for a reminder
 func (c *ScheduleCalculator) CalculateNextTrigger(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
 	if reminder.Type == models.ReminderTypeOneTime {
@@ -47,7 +65,7 @@ func (c *ScheduleCalculator) calculateRecurring(reminder *models.Reminder, fromT
 	pattern := reminder.RecurrencePattern
 
 	// Handle interval-based recurrence
-	if pattern.IntervalSeconds > 0 {
+	if pattern.Frequency != "" && pattern.Interval > 0 {
 		return c.calculateIntervalBased(reminder, fromTime)
 	}
 
@@ -68,7 +86,8 @@ func (c *ScheduleCalculator) calculateRecurring(reminder *models.Reminder, fromT
 
 // calculateIntervalBased calculates next trigger based on interval
 func (c *ScheduleCalculator) calculateIntervalBased(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	interval := time.Duration(reminder.RecurrencePattern.IntervalSeconds) * time.Second
+	intervalSeconds := c.convertFrequencyToSeconds(reminder.RecurrencePattern.Frequency, reminder.RecurrencePattern.Interval)
+	interval := time.Duration(intervalSeconds) * time.Second
 
 	// If base_on is completion, calculate from completion time
 	if reminder.RecurrencePattern.BaseOn == models.BaseOnCompletion {

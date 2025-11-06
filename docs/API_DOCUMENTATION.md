@@ -170,11 +170,12 @@ All reminder endpoints require authentication.
   "next_trigger_at": "string (ISO 8601 format)",
   "trigger_time_of_day": "string (HH:MM format)",
   "recurrence_pattern": {
-    "frequency": "string (daily, weekly, monthly, yearly)",
+    "type": "string (daily, weekly, monthly, lunar_last_day_of_month, interval_based)",
+    "frequency": "string (minute, hour, day, week, month)",
     "interval": 1,
-    "days_of_week": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
-    "days_of_month": [1, 15],
-    "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    "day_of_week": "string (mon, tue, wed, thu, fri, sat, sun)",
+    "day_of_month": 1,
+    "base_on": "string (solar, lunar)"
   },
   "repeat_strategy": "string (fixed_date, relative_date)",
   "retry_interval_sec": 300,
@@ -186,8 +187,7 @@ All reminder endpoints require authentication.
   "last_sent_at": "string (ISO 8601 format)",
   "created": "string (ISO 8601 format)",
   "updated": "string (ISO 8601 format)"
-}
-```
+}```
 
 ### SystemStatus
 ```json
@@ -201,7 +201,84 @@ All reminder endpoints require authentication.
 }
 ```
 
-## 5. Error Responses
+## 5. Recurrence Pattern Types
+
+The recurrence pattern supports multiple types of recurring reminders:
+
+### 1. INTERVAL-BASED
+- **type**: `"interval_based"`
+- **frequency**: `"minute"`, `"hour"`, `"day"`, `"week"`, `"month"`
+- **interval**: Number (e.g., 1, 2, 3)
+- **Example**: Repeat every 2 hours
+```json
+{
+  "type": "interval_based",
+  "frequency": "hour",
+  "interval": 2
+}
+```
+
+### 2. DAILY
+- **type**: `"daily"`
+- **frequency**: `"day"`
+- **interval**: 1
+- **Example**: Repeat daily
+```json
+{
+  "type": "daily",
+  "frequency": "day",
+  "interval": 1
+}
+```
+
+### 3. WEEKLY
+- **type**: `"weekly"`
+- **frequency**: `"week"`
+- **interval**: 1
+- **day_of_week**: `"mon"`, `"tue"`, `"wed"`, `"thu"`, `"fri"`, `"sat"`, `"sun"`
+- **Example**: Repeat every Monday
+```json
+{
+  "type": "weekly",
+  "frequency": "week",
+  "interval": 1,
+  "day_of_week": "mon"
+}
+```
+
+### 4. MONTHLY
+- **type**: `"monthly"`
+- **frequency**: `"month"`
+- **interval**: 1
+- **day_of_month**: Number (1-31)
+- **base_on**: `"solar"` or `"lunar"`
+- **Example**: Repeat on the 15th of every month (solar calendar)
+```json
+{
+  "type": "monthly",
+  "frequency": "month",
+  "interval": 1,
+  "day_of_month": 15,
+  "base_on": "solar"
+}
+```
+
+### 5. LUNAR LAST DAY
+- **type**: `"lunar_last_day_of_month"`
+- **frequency**: `"month"`
+- **interval**: 1
+- **base_on**: `"lunar"`
+- **Example**: Repeat on the last day of lunar month
+```json
+{
+  "type": "lunar_last_day_of_month",
+  "frequency": "month",
+  "interval": 1,
+  "base_on": "lunar"
+}
+```
+
+## 6. Error Responses
 
 When an API call fails, the server responds with a standard JSON error format.
 

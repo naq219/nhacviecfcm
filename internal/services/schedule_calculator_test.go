@@ -40,8 +40,7 @@ func TestScheduleCalculator_CalculateNextTrigger(t *testing.T) {
 		reminder := &models.Reminder{
 			Type: models.ReminderTypeRecurring,
 			RecurrencePattern: &models.RecurrencePattern{
-				Type:            models.RecurrenceTypeDaily,
-				IntervalSeconds: 0,
+				Type: models.RecurrenceTypeDaily,
 			},
 			TriggerTimeOfDay: "09:00",
 		}
@@ -104,8 +103,9 @@ func TestScheduleCalculator_calculateIntervalBased(t *testing.T) {
 		completedAtStr := completedAt.Format(time.RFC3339)
 		reminder := &models.Reminder{
 			RecurrencePattern: &models.RecurrencePattern{
-				IntervalSeconds: 3600, // 1 hour
-				BaseOn:          models.BaseOnCompletion,
+				Frequency: "hour",
+				Interval:  1,
+				BaseOn:    models.BaseOnCompletion,
 			},
 			LastCompletedAt: completedAtStr,
 		}
@@ -122,8 +122,9 @@ func TestScheduleCalculator_calculateIntervalBased(t *testing.T) {
 		created := now.Add(-2 * time.Hour)
 		reminder := &models.Reminder{
 			RecurrencePattern: &models.RecurrencePattern{
-				IntervalSeconds: 3600, // 1 hour
-				BaseOn:          models.BaseOnCompletion,
+				Frequency: "hour",
+				Interval:  1,
+				BaseOn:    models.BaseOnCompletion,
 			},
 			Created:         created,
 			LastCompletedAt: "",
@@ -140,8 +141,9 @@ func TestScheduleCalculator_calculateIntervalBased(t *testing.T) {
 		now := time.Now()
 		reminder := &models.Reminder{
 			RecurrencePattern: &models.RecurrencePattern{
-				IntervalSeconds: 3600, // 1 hour
-				BaseOn:          models.BaseOnCreation,
+				Frequency: "hour",
+				Interval:  1,
+				BaseOn:    models.BaseOnCreation,
 			},
 		}
 
