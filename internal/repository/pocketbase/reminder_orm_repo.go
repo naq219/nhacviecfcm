@@ -2,6 +2,7 @@ package pocketbase
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -164,26 +165,26 @@ func (r *ReminderORMRepo) Delete(ctx context.Context, id string) error {
 // GetDueReminders retrieves reminders that are due before a given time
 func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error) {
 	type ReminderRecord struct {
-		ID               string `db:"id"`
-		UserID           string `db:"user_id"`
-		Title            string `db:"title"`
-		Description      string `db:"description"`
-		Type             string `db:"type"`
-		CalendarType     string `db:"calendar_type"`
-		NextTriggerAt    string `db:"next_trigger_at"`
-		TriggerTimeOfDay string `db:"trigger_time_of_day"`
-		RecurrenceJSON   string `db:"recurrence_pattern"`
-		RepeatStrategy   string `db:"repeat_strategy"`
-		RetryIntervalSec int    `db:"retry_interval_sec"`
-		MaxRetries       int    `db:"max_retries"`
-		RetryCount       int    `db:"retry_count"`
-		Status           string `db:"status"`
-		SnoozeUntil      string `db:"snooze_until"`
-		LastCompletedAt  string `db:"last_completed_at"`
-		LastSentAt       string `db:"last_sent_at"`
-		Created          string `db:"created"`
-		Updated          string `db:"updated"`
-	}
+	ID               string         `db:"id"`
+	UserID           string         `db:"user_id"`
+	Title            string         `db:"title"`
+	Description      string         `db:"description"`
+	Type             string         `db:"type"`
+	CalendarType     string         `db:"calendar_type"`
+	NextTriggerAt    string         `db:"next_trigger_at"`
+	TriggerTimeOfDay string         `db:"trigger_time_of_day"`
+	RecurrenceJSON   sql.NullString `db:"recurrence_pattern"`
+	RepeatStrategy   string         `db:"repeat_strategy"`
+	RetryIntervalSec int            `db:"retry_interval_sec"`
+	MaxRetries       int            `db:"max_retries"`
+	RetryCount       int            `db:"retry_count"`
+	Status           string         `db:"status"`
+	SnoozeUntil      string         `db:"snooze_until"`
+	LastCompletedAt  string         `db:"last_completed_at"`
+	LastSentAt       string         `db:"last_sent_at"`
+	Created          string         `db:"created"`
+	Updated          string         `db:"updated"`
+}
 
 	records := []ReminderRecord{}
 	err := r.app.DB().
@@ -223,13 +224,13 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 		}
 
 		// Parse RecurrencePattern if present
-		if rec.RecurrenceJSON != "" {
-			var pattern models.RecurrencePattern
-			if err := json.Unmarshal([]byte(rec.RecurrenceJSON), &pattern); err != nil {
-				return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
-			}
-			reminder.RecurrencePattern = &pattern
+	if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
+		var pattern models.RecurrencePattern
+		if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err != nil {
+			return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
 		}
+		reminder.RecurrencePattern = &pattern
+	}
 
 		reminders = append(reminders, reminder)
 	}
@@ -240,25 +241,25 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 // GetByUserID retrieves all reminders for a specific user
 func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error) {
 	type ReminderRecord struct {
-		ID               string `db:"id"`
-		UserID           string `db:"user_id"`
-		Title            string `db:"title"`
-		Description      string `db:"description"`
-		Type             string `db:"type"`
-		CalendarType     string `db:"calendar_type"`
-		NextTriggerAt    string `db:"next_trigger_at"`
-		TriggerTimeOfDay string `db:"trigger_time_of_day"`
-		RecurrenceJSON   string `db:"recurrence_pattern"`
-		RepeatStrategy   string `db:"repeat_strategy"`
-		RetryIntervalSec int    `db:"retry_interval_sec"`
-		MaxRetries       int    `db:"max_retries"`
-		RetryCount       int    `db:"retry_count"`
-		Status           string `db:"status"`
-		SnoozeUntil      string `db:"snooze_until"`
-		LastCompletedAt  string `db:"last_completed_at"`
-		LastSentAt       string `db:"last_sent_at"`
-		Created          string `db:"created"`
-		Updated          string `db:"updated"`
+		ID               string         `db:"id"`
+		UserID           string         `db:"user_id"`
+		Title            string         `db:"title"`
+		Description      string         `db:"description"`
+		Type             string         `db:"type"`
+		CalendarType     string         `db:"calendar_type"`
+		NextTriggerAt    string         `db:"next_trigger_at"`
+		TriggerTimeOfDay string         `db:"trigger_time_of_day"`
+		RecurrenceJSON   sql.NullString `db:"recurrence_pattern"`
+		RepeatStrategy   string         `db:"repeat_strategy"`
+		RetryIntervalSec int            `db:"retry_interval_sec"`
+		MaxRetries       int            `db:"max_retries"`
+		RetryCount       int            `db:"retry_count"`
+		Status           string         `db:"status"`
+		SnoozeUntil      string         `db:"snooze_until"`
+		LastCompletedAt  string         `db:"last_completed_at"`
+		LastSentAt       string         `db:"last_sent_at"`
+		Created          string         `db:"created"`
+		Updated          string         `db:"updated"`
 	}
 
 	records := []ReminderRecord{}
@@ -296,9 +297,9 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 		}
 
 		// Parse RecurrencePattern if present
-		if rec.RecurrenceJSON != "" {
+		if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
 			var pattern models.RecurrencePattern
-			if err := json.Unmarshal([]byte(rec.RecurrenceJSON), &pattern); err != nil {
+			if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err != nil {
 				return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
 			}
 			reminder.RecurrencePattern = &pattern

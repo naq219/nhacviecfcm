@@ -78,20 +78,80 @@ func (s *ReminderService) GetReminder(ctx context.Context, id string) (*models.R
 
 // UpdateReminder updates a reminder
 func (s *ReminderService) UpdateReminder(ctx context.Context, reminder *models.Reminder) error {
-	if err := reminder.Validate(); err != nil {
+	// For partial updates, get the existing reminder first to validate only changed fields
+	existingReminder, err := s.reminderRepo.GetByID(ctx, reminder.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing reminder: %w", err)
+	}
+
+	// Merge the updates into the existing reminder
+	if reminder.Title != "" {
+		existingReminder.Title = reminder.Title
+	}
+	if reminder.Description != "" {
+		existingReminder.Description = reminder.Description
+	}
+	if reminder.Type != "" {
+		existingReminder.Type = reminder.Type
+	}
+	if reminder.CalendarType != "" {
+		existingReminder.CalendarType = reminder.CalendarType
+	}
+	if reminder.NextTriggerAt != "" {
+		existingReminder.NextTriggerAt = reminder.NextTriggerAt
+	}
+	if reminder.TriggerTimeOfDay != "" {
+		existingReminder.TriggerTimeOfDay = reminder.TriggerTimeOfDay
+	}
+	if reminder.RecurrencePattern != nil {
+		existingReminder.RecurrencePattern = reminder.RecurrencePattern
+	}
+	if reminder.RepeatStrategy != "" {
+		existingReminder.RepeatStrategy = reminder.RepeatStrategy
+	}
+	if reminder.RetryIntervalSec != 0 {
+		existingReminder.RetryIntervalSec = reminder.RetryIntervalSec
+	}
+	if reminder.MaxRetries != 0 {
+		existingReminder.MaxRetries = reminder.MaxRetries
+	}
+	if reminder.RetryCount != 0 {
+		existingReminder.RetryCount = reminder.RetryCount
+	}
+	if reminder.Status != "" {
+		existingReminder.Status = reminder.Status
+	}
+	if reminder.SnoozeUntil != "" {
+		existingReminder.SnoozeUntil = reminder.SnoozeUntil
+	}
+	if reminder.LastCompletedAt != "" {
+		existingReminder.LastCompletedAt = reminder.LastCompletedAt
+	}
+	if reminder.LastSentAt != "" {
+		existingReminder.LastSentAt = reminder.LastSentAt
+	}
+	
+	// Always preserve the user_id from existing reminder to prevent it from being cleared
+	if reminder.UserID != "" {
+		existingReminder.UserID = reminder.UserID
+	}
+
+	// Validate the merged reminder
+	if err := existingReminder.Validate(); err != nil {
 		return err
 	}
-	// Recalculate next trigger time if needed
-	if reminder.Type == models.ReminderTypeRecurring {
+
+	// Recalculate next trigger time if needed for recurring reminders
+	if existingReminder.Type == models.ReminderTypeRecurring {
 		now := time.Now().UTC()
-		nextTriggerTime, err := s.schedCalculator.CalculateNextTrigger(reminder, now)
+		nextTriggerTime, err := s.schedCalculator.CalculateNextTrigger(existingReminder, now)
 		if err != nil {
 			return fmt.Errorf("failed to calculate next trigger time for update: %w", err)
 		}
-		reminder.NextTriggerAt = nextTriggerTime.Format(time.RFC3339)
+		existingReminder.NextTriggerAt = nextTriggerTime.Format(time.RFC3339)
 	}
 
-	return s.reminderRepo.Update(ctx, reminder)
+	return s.reminderRepo.Update(ctx, existingReminder)
 }
 
 // DeleteReminder deletes a reminder
