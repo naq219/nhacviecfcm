@@ -74,6 +74,9 @@ func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) er
 		return fmt.Errorf("failed to save reminder record: %w", err)
 	}
 
+	// Cập nhật ID mới được tạo bởi PocketBase vào reminder object
+	reminder.ID = record.Id
+
 	return nil
 }
 

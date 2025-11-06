@@ -8,8 +8,6 @@ import (
 
 	"remiaq/internal/models"
 	"remiaq/internal/repository"
-
-	"github.com/google/uuid"
 )
 
 // ReminderService handles reminder business logic
@@ -42,10 +40,9 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 		return err
 	}
 
-	// Generate ID if not provided
-	if reminder.ID == "" {
-		reminder.ID = uuid.New().String()
-	}
+	// PocketBase sẽ tự tạo ID (giới hạn 15 ký tự)
+	// Không tạo ID ở đây để tránh xung đột
+	reminder.ID = ""
 
 	// Set default values
 	if reminder.Status == "" {
