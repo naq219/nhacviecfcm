@@ -59,12 +59,12 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 	}
 
 	// Calculate next trigger time if not set
-	if reminder.NextTriggerAt == "" {
+	if reminder.NextTriggerAt == nil {
 		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, time.Now())
 		if err != nil {
 			return err
 		}
-		reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
+		reminder.NextTriggerAt = &nextTrigger
 	}
 
 	if err := s.reminderRepo.Create(ctx, reminder); err != nil {
@@ -91,7 +91,7 @@ func (s *ReminderService) UpdateReminder(ctx context.Context, reminder *models.R
 		if err != nil {
 			return fmt.Errorf("failed to calculate next trigger time for update: %w", err)
 		}
-		reminder.NextTriggerAt = nextTriggerTime.Format(time.RFC3339)
+		reminder.NextTriggerAt = &nextTriggerTime
 	}
 
 	return s.reminderRepo.Update(ctx, reminder)
@@ -110,7 +110,7 @@ func (s *ReminderService) GetUserReminders(ctx context.Context, userID string) (
 // SnoozeReminder postpones a reminder
 func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duration time.Duration) error {
 	snoozeUntil := time.Now().Add(duration)
-	return s.reminderRepo.UpdateSnooze(ctx, id, snoozeUntil.Format(time.RFC3339))
+	return s.reminderRepo.UpdateSnooze(ctx, id, &snoozeUntil)
 }
 
 // CompleteReminder marks a reminder as completed
@@ -121,8 +121,7 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 	}
 
 	now := time.Now()
-	nowStr := now.Format(time.RFC3339)
-	reminder.LastCompletedAt = nowStr
+	reminder.LastCompletedAt = &now
 	reminder.Status = models.ReminderStatusCompleted
 
 	// For one-time reminders, we are done.
@@ -137,7 +136,7 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 			// Log the error but don't block completion
 			fmt.Printf("WARN: could not calculate next trigger for completed reminder %s: %v\n", reminder.ID, err)
 		} else {
-			reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
+			reminder.NextTriggerAt = &nextTrigger
 			reminder.Status = models.ReminderStatusActive // Reset for the next cycle
 		}
 	}
@@ -203,7 +202,7 @@ func (s *ReminderService) processSingleDueReminder(ctx context.Context, reminder
 		}
 
 		// Update last_sent_at only when we actually sent something
-		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now.Format(time.RFC3339))
+		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now)
 	}
 
 	// Handle based on type
@@ -218,7 +217,8 @@ func (s *ReminderService) processSingleDueReminder(ctx context.Context, reminder
 func (s *ReminderService) handleOneTimeReminder(ctx context.Context, reminder *models.Reminder) error {
 	// Mark as completed
 	reminder.Status = models.ReminderStatusCompleted
-	reminder.LastCompletedAt = time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC()
+	reminder.LastCompletedAt = &now
 	return s.reminderRepo.Update(ctx, reminder)
 }
 
@@ -232,7 +232,7 @@ func (s *ReminderService) handleRecurringReminder(ctx context.Context, reminder 
 		// Decide on a fallback, e.g., retry in 1 hour
 		nextTrigger = now.Add(1 * time.Hour)
 	}
-	reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
+	reminder.NextTriggerAt = &nextTrigger
 
 	// Update the reminder with the new next_trigger_at
 	return s.reminderRepo.Update(ctx, reminder)

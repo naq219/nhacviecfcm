@@ -31,8 +31,8 @@ func (c *ScheduleCalculator) CalculateNextTrigger(reminder *models.Reminder, fro
 // calculateOneTime calculates next trigger for one-time reminders
 func (c *ScheduleCalculator) calculateOneTime(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
 	// For one-time reminders, return the set trigger time
-	if reminder.NextTriggerAt != "" {
-		return time.Parse(time.RFC3339, reminder.NextTriggerAt)
+	if reminder.NextTriggerAt != nil {
+		return *reminder.NextTriggerAt, nil
 	}
 
 	return fromTime, nil
@@ -72,13 +72,8 @@ func (c *ScheduleCalculator) calculateIntervalBased(reminder *models.Reminder, f
 
 	// If base_on is completion, calculate from completion time
 	if reminder.RecurrencePattern.BaseOn == models.BaseOnCompletion {
-		if reminder.LastCompletedAt != "" {
-			lastCompleted, err := time.Parse(time.RFC3339, reminder.LastCompletedAt)
-			if err != nil {
-				// Fallback to creation time if parse fails
-				return reminder.Created.Add(interval), nil
-			}
-			return lastCompleted.Add(interval), nil
+		if reminder.LastCompletedAt != nil {
+			return reminder.LastCompletedAt.Add(interval), nil
 		}
 		// If never completed, use creation time
 		return reminder.Created.Add(interval), nil
