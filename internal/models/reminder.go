@@ -12,7 +12,7 @@ type Reminder struct {
 	Description       string             `json:"description" db:"description"`
 	Type              string             `json:"type" db:"type"`                   // one_time, recurring
 	CalendarType      string             `json:"calendar_type" db:"calendar_type"` // solar, lunar
-	NextTriggerAt     *time.Time         `json:"next_trigger_at" db:"next_trigger_at"`
+	NextTriggerAt     string             `json:"next_trigger_at" db:"next_trigger_at"`
 	TriggerTimeOfDay  string             `json:"trigger_time_of_day" db:"trigger_time_of_day"` // HH:MM format
 	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern" db:"recurrence_pattern"`   // JSON field
 	RepeatStrategy    string             `json:"repeat_strategy" db:"repeat_strategy"`         // none, retry_until_complete
@@ -20,9 +20,9 @@ type Reminder struct {
 	MaxRetries        int                `json:"max_retries" db:"max_retries"`
 	RetryCount        int                `json:"retry_count" db:"retry_count"`
 	Status            string             `json:"status" db:"status"` // active, completed, paused
-	SnoozeUntil       *time.Time         `json:"snooze_until" db:"snooze_until"`
-	LastCompletedAt   *time.Time         `json:"last_completed_at" db:"last_completed_at"`
-	LastSentAt        *time.Time         `json:"last_sent_at" db:"last_sent_at"`
+	SnoozeUntil       string             `json:"snooze_until" db:"snooze_until"`
+	LastCompletedAt   string             `json:"last_completed_at" db:"last_completed_at"`
+	LastSentAt        string             `json:"last_sent_at" db:"last_sent_at"`
 	Created           time.Time          `json:"created" db:"created"`
 	Updated           time.Time          `json:"updated" db:"updated"`
 }
@@ -132,14 +132,22 @@ func (r *Reminder) ShouldSend(now time.Time) bool {
 	nowTime := now.UTC()
 
 	// Check snooze
-	if r.SnoozeUntil != nil && nowTime.Before(*r.SnoozeUntil) {
-		return false
+	if r.SnoozeUntil != "" {
+		snoozeTime, err := time.Parse(time.RFC3339, r.SnoozeUntil)
+		if err == nil && nowTime.Before(snoozeTime) {
+			return false
+		}
 	}
 
 	// Check trigger time
-	if r.NextTriggerAt == nil {
+	if r.NextTriggerAt == "" {
+		return false
+	}
+	triggerTime, err := time.Parse(time.RFC3339, r.NextTriggerAt)
+	if err != nil {
+		// Consider how to handle parse errors. For now, treat as not ready.
 		return false
 	}
 
-	return !nowTime.Before(*r.NextTriggerAt)
+	return !nowTime.Before(triggerTime)
 }

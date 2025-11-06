@@ -1,0 +1,369 @@
+{
+	"info": {
+		"_postman_id": "b9e57f90-5f3c-48c8-8ab0-0f6047a855c7",
+		"name": "RemiAq API (Corrected)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "36689404"
+	},
+	"item": [
+		{
+			"name": "Register User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"a9@a.a\",\n  \"password\": \"123123123\",\n  \"passwordConfirm\": \"123123123\"\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/collections/musers/records",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"collections",
+						"musers",
+						"records"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"identity\": \"a1@a.a\",\n  \"password\": \"123123123\"\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/collections/users/auth-with-password",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"collections",
+						"users",
+						"auth-with-password"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Current User Reminders",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/mine",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						"mine"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Reminder",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Nhắc nhở mới001\",\n  \"description\": \"Nội dung lời nhắc001\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"next_trigger_at\": \"2025-12-31T23:59:59Z\",\n  \"trigger_time_of_day\": \"23:59\",\n  \"status\": \"active\"\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Reminder by ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/:id",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Reminder",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Nhắc nhở đã cập nhật\",\n  \"description\": \"Nội dung lời nhắc đã thay đổi\",\n  \"next_trigger_at\": \"2026-01-01T12:00:00Z\"\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/:id",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Reminder",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/:id",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						":id"
+					],
+					"variable": [
+						{
+							"key": "id"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Snooze Reminder",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"duration\": 300\n}"
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/:id/snooze",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						":id",
+						"snooze"
+					],
+					"variable": [
+						{
+							"key": "id"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Complete Reminder",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}"
+					}
+				],
+				"url": {
+					"raw": "http://127.0.0.1:8090/api/reminders/:id/complete",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8090",
+					"path": [
+						"api",
+						"reminders",
+						":id",
+						"complete"
+					],
+					"variable": [
+						{
+							"key": "id"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"var jsonData = pm.response.json();",
+					"if (pm.request.url.includes(\"auth-with-password\") && jsonData && jsonData.token) {",
+					"    pm.environment.set(\"auth_token\", jsonData.token);",
+					"    pm.environment.set(\"user_id\", jsonData.record.id);",
+					"    console.log(\"Auth Token set: \" + jsonData.token);",
+					"    console.log(\"User ID set: \" + jsonData.record.id);",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
