@@ -4,6 +4,7 @@ package pocketbase
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"remiaq/internal/db"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 type ReminderRepo struct {
@@ -25,43 +27,54 @@ func NewReminderRepo(app *pocketbase.PocketBase) repository.ReminderRepository {
 }
 
 func (r *ReminderRepo) Create(ctx context.Context, reminder *models.Reminder) error {
-	patternJSON, _ := json.Marshal(reminder.RecurrencePattern)
-	now := time.Now().UTC()
+	// Lấy collection reminders
+	collection, err := r.helper.App().FindCollectionByNameOrId("reminders")
+	if err != nil {
+		return fmt.Errorf("failed to find reminders collection: %w", err)
+	}
 
-	query := `
-        INSERT INTO reminders (
-            id, user_id, title, description, type, calendar_type,
-            next_trigger_at, trigger_time_of_day, recurrence_pattern,
-            repeat_strategy, retry_interval_sec, max_retries, status,
-            snooze_until, last_completed_at, last_sent_at, created, updated
-        ) VALUES (
-            {:id}, {:user_id}, {:title}, {:description}, {:type}, {:calendar_type},
-            {:next_trigger_at}, {:trigger_time_of_day}, {:recurrence_pattern},
-            {:repeat_strategy}, {:retry_interval_sec}, {:max_retries}, {:status},
-            {:snooze_until}, {:last_completed_at}, {:last_sent_at}, {:created}, {:updated}
-        )
-    `
+	// Tạo record mới
+	record := core.NewRecord(collection)
+	
+	// Thiết lập các giá trị từ reminder model
+	// Không set ID để PocketBase tự tạo ID (giới hạn 15 ký tự)
+	// record.Set("id", reminder.ID)
+	record.Set("user_id", reminder.UserID)
+	record.Set("title", reminder.Title)
+	record.Set("description", reminder.Description)
+	record.Set("type", reminder.Type)
+	record.Set("calendar_type", reminder.CalendarType)
+	record.Set("next_trigger_at", reminder.NextTriggerAt)
+	record.Set("trigger_time_of_day", reminder.TriggerTimeOfDay)
+	record.Set("repeat_strategy", reminder.RepeatStrategy)
+	record.Set("retry_interval_sec", reminder.RetryIntervalSec)
+	record.Set("max_retries", reminder.MaxRetries)
+	record.Set("retry_count", reminder.RetryCount)
+	record.Set("status", reminder.Status)
+	record.Set("snooze_until", reminder.SnoozeUntil)
+	record.Set("last_completed_at", reminder.LastCompletedAt)
+	record.Set("last_sent_at", reminder.LastSentAt)
 
-	return r.helper.Exec(query, dbx.Params{
-		"id":                  reminder.ID,
-		"user_id":             reminder.UserID,
-		"title":               reminder.Title,
-		"description":         reminder.Description,
-		"type":                reminder.Type,
-		"calendar_type":       reminder.CalendarType,
-		"next_trigger_at":     reminder.NextTriggerAt,
-		"trigger_time_of_day": reminder.TriggerTimeOfDay,
-		"recurrence_pattern":  string(patternJSON),
-		"repeat_strategy":     reminder.RepeatStrategy,
-		"retry_interval_sec":  reminder.RetryIntervalSec,
-		"max_retries":         reminder.MaxRetries,
-		"status":              reminder.Status,
-		"snooze_until":        reminder.SnoozeUntil,
-		"last_completed_at":   reminder.LastCompletedAt,
-		"last_sent_at":        reminder.LastSentAt,
-		"created":             now.Format(time.RFC3339),
-		"updated":             now.Format(time.RFC3339),
-	})
+	// Xử lý recurrence_pattern dạng JSON
+	if reminder.RecurrencePattern != nil {
+		patternJSON, err := json.Marshal(reminder.RecurrencePattern)
+		if err != nil {
+			return fmt.Errorf("failed to marshal recurrence pattern: %w", err)
+		}
+		record.Set("recurrence_pattern", string(patternJSON))
+	} else {
+		record.Set("recurrence_pattern", "")
+	}
+
+	// PocketBase tự động xử lý created và updated
+	// Không cần set created và updated vì PocketBase tự động xử lý
+
+	// Lưu record
+	if err := r.helper.App().Save(record); err != nil {
+		return fmt.Errorf("failed to save reminder record: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ReminderRepo) GetByID(ctx context.Context, id string) (*models.Reminder, error) {

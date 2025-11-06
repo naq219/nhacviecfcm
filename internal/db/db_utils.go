@@ -17,22 +17,28 @@ type DBHelperInterface interface {
 	Exec(query string, params dbx.Params) error
 	Count(query string, params dbx.Params) (int, error)
 	Exists(query string, params dbx.Params) (bool, error)
+	App() *pocketbase.PocketBase
 }
 
 type DBHelper struct {
-	App *pocketbase.PocketBase
+	app *pocketbase.PocketBase
+}
+
+// App returns the PocketBase app instance
+func (h *DBHelper) App() *pocketbase.PocketBase {
+	return h.app
 }
 
 // NewDBHelper returns a helper bound to the current PocketBase app
 func NewDBHelper(app *pocketbase.PocketBase) *DBHelper {
-	return &DBHelper{App: app}
+	return &DBHelper{app: app}
 }
 
 // GetOneRow runs a query and returns a single row as raw map.
 // Returns error if no row found or query fails.
 func (h *DBHelper) GetOneRow(query string, params dbx.Params) (dbx.NullStringMap, error) {
 	var result dbx.NullStringMap
-	q := h.App.DB().NewQuery(query).Bind(params)
+	q := h.app.DB().NewQuery(query).Bind(params)
 	err := q.One(&result)
 	if err != nil {
 		log.Printf("[DBHelper] GetOneRow failed (query=%s): %v", query, err)
@@ -68,7 +74,7 @@ func GetOneWithConfig[T any](h DBHelperInterface, query string, params dbx.Param
 // Returns error if query fails.
 func (h *DBHelper) GetAllRows(query string, params dbx.Params) ([]dbx.NullStringMap, error) {
 	var results []dbx.NullStringMap
-	q := h.App.DB().NewQuery(query).Bind(params)
+	q := h.app.DB().NewQuery(query).Bind(params)
 	err := q.All(&results)
 	if err != nil {
 		log.Printf("[DBHelper] GetAllRows failed (query=%s): %v", query, err)
@@ -120,7 +126,7 @@ func GetAllWithConfig[T any](h DBHelperInterface, query string, params dbx.Param
 // Exec runs INSERT, UPDATE, DELETE queries.
 // Returns error if execution fails.
 func (h *DBHelper) Exec(query string, params dbx.Params) error {
-	q := h.App.DB().NewQuery(query).Bind(params)
+	q := h.app.DB().NewQuery(query).Bind(params)
 	// Lấy thông tin câu lệnh và tham số (phiên bản dbx của PocketBase)
 	sqlStr, args := q.SQL(), q.Params()
 	log.Printf("[DBHelper] Exec SQL: %s | args=%v", sqlStr, args)
@@ -151,7 +157,7 @@ func (h *DBHelper) Count(query string, params dbx.Params) (int, error) {
 	var result struct {
 		Count int `db:"count"`
 	}
-	q := h.App.DB().NewQuery(query).Bind(params)
+	q := h.app.DB().NewQuery(query).Bind(params)
 	err := q.One(&result)
 	if err != nil {
 		log.Printf("[DBHelper] Count failed (query=%s): %v", query, err)
@@ -169,7 +175,7 @@ func (h *DBHelper) Exists(query string, params dbx.Params) (bool, error) {
 	var result struct {
 		Ok bool `db:"ok"`
 	}
-	q := h.App.DB().NewQuery(existsQuery).Bind(params)
+	q := h.app.DB().NewQuery(existsQuery).Bind(params)
 	err := q.One(&result)
 	if err != nil {
 		log.Printf("[DBHelper] Exists failed (query=%s): %v", query, err)

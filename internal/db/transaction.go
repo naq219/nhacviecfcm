@@ -23,7 +23,7 @@ func InTransaction(app *pocketbase.PocketBase, fn func(tx *DBHelper) error) erro
 
 	return app.RunInTransaction(func(txApp core.App) error {
 		// Convert the transaction app to DBHelper
-		txHelper := &DBHelper{App: txApp.(*pocketbase.PocketBase)}
+		txHelper := &DBHelper{app: txApp.(*pocketbase.PocketBase)}
 		return fn(txHelper)
 	})
 }

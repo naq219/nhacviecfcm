@@ -48,13 +48,24 @@ func mockReminderRow(id, userID, title, status string) dbx.NullStringMap {
 func TestReminderRepo_Create(t *testing.T) {
 	t.Run("should create reminder successfully", func(t *testing.T) {
 		mockHelper := &MockDBHelper{
-			ExecFn: func(query string, params dbx.Params) error {
-				assert.Contains(t, query, "INSERT INTO reminders")
-				assert.Equal(t, "test-id", params["id"])
-				assert.Equal(t, "user-123", params["user_id"])
-				assert.NotContains(t, params, "created")
-				assert.NotContains(t, params, "updated")
-				return nil
+			AppFn: func() *MockApp {
+				return &MockApp{
+					FindCollectionByNameOrIdFn: func(nameOrId string) (*core.Collection, error) {
+						assert.Equal(t, "reminders", nameOrId)
+						return &core.Collection{
+							Id:   "reminders",
+							Name: "reminders",
+						}, nil
+					},
+					SaveFn: func(record *core.Record) error {
+						// Kiểm tra các giá trị được set trong record
+						assert.Equal(t, "test-id", record.GetString("id"))
+						assert.Equal(t, "user-123", record.GetString("user_id"))
+						assert.Equal(t, "Test Reminder", record.GetString("title"))
+						assert.Equal(t, "active", record.GetString("status"))
+						return nil
+					},
+				}
 			},
 		}
 
