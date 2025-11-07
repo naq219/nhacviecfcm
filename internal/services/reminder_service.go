@@ -252,6 +252,8 @@ func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
 
 		// Check if user has active FCM
 		if !user.IsFCMActive || user.FCMToken == "" {
+			fmt.Printf("USER FCM INACTIVE - Reminder %s: user %s has inactive FCM (is_fcm_active=%t, fcm_token='%s')\n", 
+				reminder.ID, reminder.UserID, user.IsFCMActive, user.FCMToken)
 			return errors.New("user FCM not active")
 		}
 

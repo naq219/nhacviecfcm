@@ -19,7 +19,7 @@ type UserORMRepo struct {
 
 var _ repository.UserRepository = (*UserORMRepo)(nil)
 
-const userCollectionName = "users"
+const userCollectionName = "musers"
 
 func NewUserORMRepo(app *pocketbase.PocketBase) repository.UserRepository {
 	return &UserORMRepo{app: app}

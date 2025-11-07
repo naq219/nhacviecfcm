@@ -73,10 +73,11 @@ func (w *Worker) runOnce(ctx context.Context) {
 
 	// Process reminders
 	if err := w.reminderService.ProcessDueReminders(ctx); err != nil {
-		// On system-level errors, disable worker and record error
-		log.Printf("WORKER ERROR: %v", err)
-		log.Printf("WORKER DETAILS: disabling worker due to system error")
-		_ = w.sysRepo.DisableWorker(ctx, err.Error())
+		// Log the error but DON'T disable worker - individual user errors should not affect others
+		log.Printf("WORKER ERROR (non-fatal): %v", err)
+		log.Printf("WORKER DETAILS: continuing worker operation, only problematic users were skipped")
+		// Record error for monitoring but keep worker running
+		_ = w.sysRepo.UpdateError(ctx, err.Error())
 		return
 	}
 
