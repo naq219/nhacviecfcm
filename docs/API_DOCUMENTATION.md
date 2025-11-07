@@ -173,21 +173,39 @@ All reminder endpoints require authentication.
     "type": "string (daily, weekly, monthly, lunar_last_day_of_month, interval_based)",
     "frequency": "string (minute, hour, day, week, month)",
     "interval": 1,
-    "day_of_week": "string (mon, tue, wed, thu, fri, sat, sun)",
+    "day_of_week": 1,
     "day_of_month": 1,
-    "base_on": "string (solar, lunar)"
+    "base_on": "string (creation, completion)"
   },
-  "repeat_strategy": "string (fixed_date, relative_date)",
+  "repeat_strategy": "string (none, retry_until_complete)",
   "retry_interval_sec": 300,
   "max_retries": 3,
   "retry_count": 0,
-  "status": "string (active, paused, completed, error)",
+  "status": "string (active, completed, paused)",
   "snooze_until": "string (ISO 8601 format)",
   "last_completed_at": "string (ISO 8601 format)",
   "last_sent_at": "string (ISO 8601 format)",
   "created": "string (ISO 8601 format)",
   "updated": "string (ISO 8601 format)"
 }```
+
+### Phân biệt giữa Recurrence Pattern và Repeat Strategy
+
+**Recurrence Pattern** (`recurrence_pattern`):
+- **Mục đích**: Định nghĩa cách một reminder lặp lại theo lịch trình cố định
+- **Áp dụng cho**: Reminders có `type: "recurring"`
+- **Ví dụ**: Lặp lại hàng ngày, hàng tuần, hàng tháng, theo lịch âm
+- **Các trường quan trọng**: `type`, `frequency`, `interval`, `day_of_week`, `day_of_month`, `base_on`
+
+**Repeat Strategy** (`repeat_strategy`):
+- **Mục đích**: Định nghĩa cách hệ thống xử lý khi reminder chưa được hoàn thành
+- **Áp dụng cho**: Cả reminders `one_time` và `recurring`
+- **Ví dụ**: Nhắc lại sau mỗi 5 phút nếu chưa hoàn thành, tối đa 3 lần
+- **Các trường quan trọng**: `repeat_strategy`, `retry_interval_sec`, `max_retries`, `retry_count`
+
+**Tóm tắt**:
+- `recurrence_pattern` = Lịch trình lặp lại cố định (theo calendar)
+- `repeat_strategy` = Cơ chế nhắc lại khi chưa hoàn thành (retry mechanism)
 
 ### SystemStatus
 ```json

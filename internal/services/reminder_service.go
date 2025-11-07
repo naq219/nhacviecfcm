@@ -221,31 +221,39 @@ func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
 			// Distinguish device token errors from system-level errors
 			if !isTokenInvalidError(err) {
 				systemErrorOccurred = true
+				// Log detailed system error to terminal
+				fmt.Printf("SYSTEM FCM ERROR - Reminder %s: %v\n", reminder.ID, err)
+			} else {
+				// Log token error details
+				fmt.Printf("TOKEN ERROR - Reminder %s: %v\n", reminder.ID, err)
 			}
-			// Log and continue with other reminders regardless
-			fmt.Printf("ERROR: failed to process reminder %s: %v\n", reminder.ID, err)
 			continue
 		}
 	}
 
 	if systemErrorOccurred {
-		return errors.New("system_fcm_error")
+		return fmt.Errorf("system_fcm_error: %d reminders failed due to system errors", len(reminders))
 	}
 	return nil
 }
 
 // processSingleDueReminder processes a single reminder
-func (s *ReminderService) processSingleDueReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	// Get user
-	user, err := s.userRepo.GetByID(ctx, reminder.UserID)
-	if err != nil {
-		return err
-	}
+	func (s *ReminderService) processSingleDueReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
+		// Get user
+		user, err := s.userRepo.GetByID(ctx, reminder.UserID)
+		if err != nil {
+			// Handle user not found error specifically
+			if err.Error() == "sql: no rows in result set" || err.Error() == "user not found" {
+				fmt.Printf("USER NOT FOUND ERROR - Reminder %s: user %s does not exist\n", reminder.ID, reminder.UserID)
+				return fmt.Errorf("user not found: %s", reminder.UserID)
+			}
+			return err
+		}
 
-	// Check if user has active FCM
-	if !user.IsFCMActive || user.FCMToken == "" {
-		return errors.New("user FCM not active")
-	}
+		// Check if user has active FCM
+		if !user.IsFCMActive || user.FCMToken == "" {
+			return errors.New("user FCM not active")
+		}
 
 	// Send notification (no-op if FCM service is not configured)
 	if s.fcmService != nil {

@@ -25,9 +25,15 @@ type FCMService struct {
 func NewFCMService(credentialsPath string) (*FCMService, error) {
 	ctx := context.Background()
 
-	// Initialize Firebase app
+	// Initialize Firebase app with explicit project ID
 	opt := option.WithCredentialsFile(credentialsPath)
-	app, err := firebase.NewApp(ctx, nil, opt)
+	
+	// Create config with project ID
+	config := &firebase.Config{
+		ProjectID: "quan-than", // Use project ID from credentials
+	}
+	
+	app, err := firebase.NewApp(ctx, config, opt)
 	if err != nil {
 		return nil, err
 	}

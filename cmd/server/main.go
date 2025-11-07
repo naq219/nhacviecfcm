@@ -57,6 +57,8 @@ func main() {
 
 	// Set PocketBase server address
 	os.Setenv("PB_ADDR", cfg.ServerAddr)
+	// Disable debug logging to reduce SQL query logs
+	os.Setenv("PB_DEBUG", "false")
 
 	// Create PocketBase instance
 	app := pocketbase.New()
