@@ -174,6 +174,7 @@ func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duratio
 func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error {
 	reminder, err := s.reminderRepo.GetByID(ctx, id)
 	if err != nil {
+		fmt.Printf("ERROR: CompleteReminder - failed to get reminder %s: %v\n", id, err)
 		return err
 	}
 
@@ -184,7 +185,12 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 
 	// For one-time reminders, we are done.
 	if reminder.Type == models.ReminderTypeOneTime {
-		return s.reminderRepo.Update(ctx, reminder)
+		if err := s.reminderRepo.Update(ctx, reminder); err != nil {
+			fmt.Printf("ERROR: CompleteReminder - failed to update one-time reminder %s: %v\n", id, err)
+			return err
+		}
+		fmt.Printf("INFO: CompleteReminder - successfully completed one-time reminder %s\n", id)
+		return nil
 	}
 
 	// For recurring reminders, calculate the next trigger
@@ -199,7 +205,12 @@ func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error
 		}
 	}
 
-	return s.reminderRepo.Update(ctx, reminder)
+	if err := s.reminderRepo.Update(ctx, reminder); err != nil {
+		fmt.Printf("ERROR: CompleteReminder - failed to update recurring reminder %s: %v\n", id, err)
+		return err
+	}
+	fmt.Printf("INFO: CompleteReminder - successfully completed recurring reminder %s\n", id)
+	return nil
 }
 
 // ProcessDueReminders processes all reminders that are due (called by worker)

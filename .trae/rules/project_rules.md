@@ -88,7 +88,7 @@ web/                 # Static web files (if any)
 - Example:
 ```go
 err := db.InTransaction(app, func(tx *db.DBHelper) error {
-    return tx.Exec("UPDATE users SET name={:n} WHERE id={:id}", 
+    return tx.Exec("UPDATE musers SET name={:n} WHERE id={:id}", 
         dbx.Params{"n": "John", "id": 1})
 })
 ```
@@ -352,3 +352,5 @@ các table có created và updated không cần phải insert, pocketbase tự �
 chạy lệnh không dùng && để tránh lỗi, ví dụ cd d:\PROJECT\nhacviecfcm && go run test_parse.go sẽ lỗi trên windows
 
 để run project : go run ./cmd/server serve
+
+#api để query db khi cần test: GET /api/rquery?query= {sql}
