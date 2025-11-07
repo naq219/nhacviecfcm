@@ -77,6 +77,10 @@ func (m *MockReminderRepository) UpdateStatus(ctx context.Context, id string, st
 	return args.Error(0)
 }
 
+type MockLunarCalendar struct {
+	mock.Mock
+}
+
 type MockUserRepository struct {
 	mock.Mock
 }
@@ -126,6 +130,23 @@ func (m *MockUserRepository) GetActiveUsers(ctx context.Context) ([]*models.User
 	return args.Get(0).([]*models.User), args.Error(1)
 }
 
+func (m *MockUserRepository) SetFCMError(ctx context.Context, userID string, errorMsg string) error {
+	args := m.Called(ctx, userID, errorMsg)
+	return args.Error(0)
+}
+
+// MockScheduleCalculator mocks the ScheduleCalculator interface
+type MockScheduleCalculator struct {
+	mock.Mock
+}
+
+func (m *MockScheduleCalculator) CalculateNextTrigger(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
+	args := m.Called(reminder, fromTime)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
+
+
 // Test helper functions
 func createTestReminder() *models.Reminder {
 	now := time.Now()
@@ -169,22 +190,45 @@ func TestNewReminderService(t *testing.T) {
 
 func TestReminderService_CreateReminder(t *testing.T) {
 	t.Run("should create reminder successfully", func(t *testing.T) {
-		reminderRepo := &MockReminderRepository{}
-		userRepo := &MockUserRepository{}
-		schedCalculator := NewScheduleCalculator(NewLunarCalendar())
-		service := NewReminderService(reminderRepo, userRepo, nil, schedCalculator)
+			reminderRepo := &MockReminderRepository{}
+			userRepo := &MockUserRepository{}
+			
+			// Use real ScheduleCalculator with real lunar calendar
+			schedCalculator := NewScheduleCalculator(NewLunarCalendar())
+			
+			service := NewReminderService(reminderRepo, userRepo, nil, schedCalculator)
 
 		reminder := createTestReminder()
 		reminder.ID = ""            // Test ID generation
 		reminder.NextTriggerAt = "" // Test next trigger calculation
+		reminder.Type = models.ReminderTypeRecurring // Make it recurring to trigger calculation
+		reminder.RecurrencePattern = &models.RecurrencePattern{
+			Frequency: "hour",
+			Interval: 1,
+			BaseOn: models.BaseOnCreation,
+		}
+		reminder.TriggerTimeOfDay = "09:00"
+		reminder.Created = time.Now() // Ensure Created is set for interval calculation
 
-		reminderRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil)
+		reminderRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Reminder")).Return(nil).Run(func(args mock.Arguments) {
+			// Simulate PocketBase auto-generating ID
+			reminder := args.Get(1).(*models.Reminder)
+			if reminder.ID == "" {
+				reminder.ID = "auto-generated-id"
+			}
+		})
+		userRepo.On("GetByID", mock.Anything, "test-user").Return(&models.User{ID: "test-user", FCMToken: "test-token"}, nil)
 
 		err := service.CreateReminder(context.Background(), reminder)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, reminder.ID)
 		assert.Equal(t, models.ReminderStatusActive, reminder.Status)
+		
+		// Debug: log the reminder to see what's happening
+		t.Logf("Created reminder: %+v", reminder)
+		t.Logf("NextTriggerAt: %s", reminder.NextTriggerAt)
+		
 		assert.NotEmpty(t, reminder.NextTriggerAt) // Check that NextTriggerAt was set
 		reminderRepo.AssertExpectations(t)
 	})
@@ -308,12 +352,11 @@ func TestReminderService_ProcessDueReminders(t *testing.T) {
 		userRepo := &MockUserRepository{}
 		service := NewReminderService(reminderRepo, userRepo, nil, NewScheduleCalculator(NewLunarCalendar()))
 
-		now := time.Now()
 		reminder := createTestReminder()
 		user := createTestUser()
 		user.FCMToken = "" // Invalid token
 
-		reminderRepo.On("GetDueReminders", mock.Anything, now).Return([]*models.Reminder{reminder}, nil)
+		reminderRepo.On("GetDueReminders", mock.Anything, mock.AnythingOfType("time.Time")).Return([]*models.Reminder{reminder}, nil)
 		userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
 		// No other expectations since FCM is not active
 

@@ -185,8 +185,8 @@ func TestWorker_runOnce_WorkerEnabled_ProcessingError(t *testing.T) {
 	processingError := errors.New("FCM service unavailable")
 	mockReminderService.On("ProcessDueReminders", mock.Anything).Return(processingError)
 	
-	// Mock disable worker
-	mockSysRepo.On("DisableWorker", mock.Anything, "FCM service unavailable").Return(nil)
+	// Mock update error (worker should continue running, not disable)
+	mockSysRepo.On("UpdateError", mock.Anything, "FCM service unavailable").Return(nil)
 	
 	ctx := context.Background()
 	worker.runOnce(ctx)
@@ -215,33 +215,7 @@ func TestWorker_runOnce_SystemStatusError(t *testing.T) {
 	mockReminderService.AssertNotCalled(t, "ProcessDueReminders")
 }
 
-func TestWorker_runOnce_DisableWorkerError(t *testing.T) {
-	mockSysRepo := &MockSystemStatusRepository{}
-	mockReminderService := &MockReminderService{}
-	
-	worker := NewWorker(mockSysRepo, mockReminderService, time.Minute)
-	
-	// Mock worker enabled
-	mockSysRepo.On("IsWorkerEnabled", mock.Anything).Return(true, nil)
-	
-	// Mock processing error
-	processingError := errors.New("FCM service unavailable")
-	mockReminderService.On("ProcessDueReminders", mock.Anything).Return(processingError)
-	
-	// Mock disable worker error (should not crash)
-	mockSysRepo.On("DisableWorker", mock.Anything, "FCM service unavailable").Return(errors.New("failed to disable"))
-	
-	ctx := context.Background()
-	
-	// Should not panic
-	assert.NotPanics(t, func() {
-		worker.runOnce(ctx)
-	})
-	
-	// Verify all calls
-	mockSysRepo.AssertExpectations(t)
-	mockReminderService.AssertExpectations(t)
-}
+
 
 func TestWorker_runOnce_ClearErrorFails(t *testing.T) {
 	mockSysRepo := &MockSystemStatusRepository{}

@@ -40,6 +40,7 @@ type UserRepository interface {
 	UpdateFCMToken(ctx context.Context, userID, token string) error
 	DisableFCM(ctx context.Context, userID string) error
 	EnableFCM(ctx context.Context, userID string, token string) error
+	SetFCMError(ctx context.Context, userID, errorMsg string) error
 
 	// Query operations
 	GetActiveUsers(ctx context.Context) ([]*models.User, error)

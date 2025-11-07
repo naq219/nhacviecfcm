@@ -32,6 +32,7 @@ func recordToUser(record *core.Record) (*models.User, error) {
 		Email:       record.GetString("email"),
 		FCMToken:    record.GetString("fcm_token"),
 		IsFCMActive: record.GetBool("is_fcm_active"),
+		FCMError:    record.GetString("fcm_error"),
 		Created:     record.GetDateTime("created").Time(),
 		Updated:     record.GetDateTime("updated").Time(),
 	}
@@ -43,6 +44,7 @@ func userToRecord(user *models.User, record *core.Record) error {
 	record.Set("email", user.Email)
 	record.Set("fcm_token", user.FCMToken)
 	record.Set("is_fcm_active", user.IsFCMActive)
+	record.Set("fcm_error", user.FCMError)
 	return nil
 }
 
@@ -197,7 +199,7 @@ func (r *UserORMRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error
 	err := r.app.DB().
 		Select("*").
 		From(userCollectionName).
-		Where(dbx.HashExp{"is_fcm_active": true}).
+		Where(dbx.NewExp("is_fcm_active = {:is_fcm_active} AND (fcm_error IS NULL OR fcm_error = '')", dbx.Params{"is_fcm_active": true})).
 		OrderBy("created DESC").
 		All(&records)
 	if err != nil {
@@ -218,4 +220,20 @@ func (r *UserORMRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error
 	}
 
 	return users, nil
+}
+
+// SetFCMError sets FCM error message for a user
+func (r *UserORMRepo) SetFCMError(ctx context.Context, userID, errorMsg string) error {
+	record, err := r.app.FindRecordById(userCollectionName, userID)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	record.Set("fcm_error", errorMsg)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to set FCM error: %w", err)
+	}
+
+	return nil
 }

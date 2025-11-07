@@ -110,14 +110,27 @@ func (r *UserRepo) EnableFCM(ctx context.Context, userID string, token string) e
 	)
 }
 
-// GetActiveUsers retrieves all users with active FCM
+// SetFCMError sets FCM error message for a user
+func (r *UserRepo) SetFCMError(ctx context.Context, userID, errorMsg string) error {
+	return r.helper.Exec(
+		"UPDATE musers SET fcm_error = {:error_msg}, updated = {:updated} WHERE id = {:id}",
+		dbx.Params{
+			"error_msg": errorMsg,
+			"updated":   time.Now().UTC(),
+			"id":        userID,
+		},
+	)
+}
+
+// GetActiveUsers retrieves all users with active FCM and no FCM errors
 func (r *UserRepo) GetActiveUsers(ctx context.Context) ([]*models.User, error) {
 	users, err := db.GetAll[models.User](
 		r.helper,
 		`SELECT * FROM musers 
 		 WHERE is_fcm_active = TRUE 
 		   AND fcm_token IS NOT NULL 
-		   AND fcm_token != ''`,
+		   AND fcm_token != ''
+		   AND (fcm_error IS NULL OR fcm_error = '')`,
 		nil,
 	)
 	if err != nil {

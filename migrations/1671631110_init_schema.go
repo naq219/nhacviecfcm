@@ -40,6 +40,10 @@ func init() {
 			Name:     "is_fcm_active",
 			Required: false,
 		})
+		musersCollection.Fields.Add(&core.TextField{
+			Name:     "fcm_error",
+			Required: false,
+		})
 		musersCollection.Fields.Add(&core.AutodateField{
 			Name:     "created",
 			OnCreate: true,

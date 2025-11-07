@@ -265,6 +265,9 @@ func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
 			if isTokenInvalidError(err) {
 				// Disable FCM for this user
 				s.userRepo.DisableFCM(ctx, user.ID)
+			} else {
+				// Record FCM error in user record for non-token errors
+				s.userRepo.SetFCMError(ctx, user.ID, err.Error())
 			}
 			return err
 		}
