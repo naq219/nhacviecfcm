@@ -325,7 +325,6 @@
             <button class="nav-tab" onclick="showTab('reminders')">Reminders</button>
             <button class="nav-tab" onclick="showTab('queries')">Raw Queries</button>
             <button class="nav-tab" onclick="showTab('advanced')">Advanced</button>
-            <button class="nav-tab" onclick="showTab('timeutils')">Time Utils</button>
         </div>
 
         <!-- Health & Status Tab -->
@@ -549,31 +548,6 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
                 <div id="batch-response" class="response-area"></div>
             </div>
         </div>
-
-        <!-- Time Utils Tab -->
-        <div id="timeutils" class="tab-content">
-            <div class="alert alert-info">
-                <strong>Time Utilities:</strong> Convert local time (GMT+7) to UTC và tính toán thời gian tương lai.
-            </div>
-
-            <div class="test-section">
-                <h3>🕐 UTC Converter</h3>
-                <div class="form-group">
-                    <label>Local Time (GMT+7):</label>
-                    <input type="datetime-local" id="local-time" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Thêm thời gian (1p=1 phút, 1h=1 giờ, 1n=1 ngày):</label>
-                    <input type="text" id="time-addition" class="form-control" placeholder="1p, 1h, 1n" value="1h">
-                </div>
-                <button class="btn btn-primary" onclick="convertToUtc()">
-                    <span class="status-indicator status-info"></span>
-                    Convert to UTC
-                </button>
-                <div id="utc-response" class="response-area"></div>
-            </div>
-        </div>
-
         <!-- API Call Log -->
         <div class="test-section" style="margin-top: 50px;">
             <h3>📡 API Call Log</h3>
@@ -595,10 +569,6 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
             document.getElementById('create-trigger-time').value = isoString;
             document.getElementById('schedule-base-time').value = isoString;
             document.getElementById('solar-date').value = now.toISOString().slice(0, 10);
-            
-            // Set default local time for UTC converter (current time in GMT+7)
-            const localTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-            document.getElementById('local-time').value = localTime.toISOString().slice(0, 16);
         });
 
         // Tab switching
@@ -641,62 +611,6 @@ VALUES ('test-user-' || datetime('now'), 'test@example.com', 'test-token', 1, da
                 </div>
                 <div class="json-viewer">${formattedResponse}</div>
             `;
-        }
-
-        // Time Utils Functions
-        function convertToUtc() {
-            const localTimeInput = document.getElementById('local-time').value;
-            const timeAddition = document.getElementById('time-addition').value.trim();
-            
-            if (!localTimeInput) {
-                showResponse('utc-response', 'Vui lòng nhập thời gian local (GMT+7)', true);
-                return;
-            }
-            
-            try {
-                // Parse local time (GMT+7)
-                let localTime = new Date(localTimeInput);
-                
-                // Apply time addition if specified
-                if (timeAddition) {
-                    const additionMatch = timeAddition.match(/^(\d+)([phn])$/i);
-                    if (additionMatch) {
-                        const value = parseInt(additionMatch[1]);
-                        const unit = additionMatch[2].toLowerCase();
-                        
-                        switch (unit) {
-                            case 'p': // minutes
-                                localTime.setMinutes(localTime.getMinutes() + value);
-                                break;
-                            case 'h': // hours
-                                localTime.setHours(localTime.getHours() + value);
-                                break;
-                            case 'n': // days
-                                localTime.setDate(localTime.getDate() + value);
-                                break;
-                        }
-                    } else {
-                        showResponse('utc-response', 'Định dạng thời gian không hợp lệ. Sử dụng: 1p (phút), 1h (giờ), 1n (ngày)', true);
-                        return;
-                    }
-                }
-                
-                // Convert GMT+7 to UTC (subtract 7 hours)
-                const utcTime = new Date(localTime.getTime() - (7 * 60 * 60 * 1000));
-                
-                const result = {
-                    local_time_gmt7: localTime.toISOString().replace('T', ' ').substring(0, 19),
-                    utc_time: utcTime.toISOString(),
-                    utc_time_formatted: utcTime.toISOString().replace('T', ' ').substring(0, 19),
-                    time_addition_applied: timeAddition || 'none',
-                    note: 'GMT+7 → UTC: trừ 7 giờ'
-                };
-                
-                showResponse('utc-response', result);
-                
-            } catch (error) {
-                showResponse('utc-response', `Lỗi: ${error.message}`, true);
-            }
         }
 
         function syntaxHighlight(json) {
