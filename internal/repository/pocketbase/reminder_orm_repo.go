@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"remiaq/internal/models"
@@ -73,51 +74,51 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 	record.Set("description", reminder.Description)
 	record.Set("type", reminder.Type)
 	record.Set("calendar_type", reminder.CalendarType)
-	
+
 	// Convert time.Time to RFC3339 string format for PocketBase
 	if !reminder.NextRecurring.IsZero() {
 		record.Set("next_recurring", reminder.NextRecurring.Format(time.RFC3339Nano))
 	} else {
 		record.Set("next_recurring", nil)
 	}
-	
+
 	if !reminder.NextCRP.IsZero() {
 		record.Set("next_crp", reminder.NextCRP.Format(time.RFC3339Nano))
 	} else {
 		record.Set("next_crp", nil)
 	}
-	
+
 	if !reminder.NextActionAt.IsZero() {
 		record.Set("next_action_at", reminder.NextActionAt.Format(time.RFC3339Nano))
 	} else {
 		record.Set("next_action_at", nil)
 	}
-	
+
 	record.Set("crp_interval_sec", reminder.CRPIntervalSec)
 	record.Set("max_crp", reminder.MaxCRP)
 	record.Set("crp_count", reminder.CRPCount)
-	
+
 	if !reminder.LastCRPCompletedAt.IsZero() {
 		record.Set("last_crp_completed_at", reminder.LastCRPCompletedAt.Format(time.RFC3339Nano))
 	} else {
 		record.Set("last_crp_completed_at", nil)
 	}
-	
+
 	record.Set("repeat_strategy", reminder.RepeatStrategy)
 	record.Set("status", reminder.Status)
-	
+
 	if !reminder.SnoozeUntil.IsZero() {
 		record.Set("snooze_until", reminder.SnoozeUntil.Format(time.RFC3339Nano))
 	} else {
 		record.Set("snooze_until", nil)
 	}
-	
+
 	if !reminder.LastSentAt.IsZero() {
 		record.Set("last_sent_at", reminder.LastSentAt.Format(time.RFC3339Nano))
 	} else {
 		record.Set("last_sent_at", nil)
 	}
-	
+
 	if !reminder.LastCompletedAt.IsZero() {
 		record.Set("last_completed_at", reminder.LastCompletedAt.Format(time.RFC3339Nano))
 	} else {
@@ -494,12 +495,46 @@ func (r *ReminderORMRepo) UpdateNextActionAt(ctx context.Context, id string, nex
 }
 
 // parseTimeDB parses time string from DB
+// parseTimeDB parses time string from database
+// Handles multiple formats since DB might return different formats
 func parseTimeDB(s string) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
-	t, _ := time.Parse(time.RFC3339Nano, s)
-	return t
+
+	// Format 1: RFC3339Nano (standard) - 2006-01-02T15:04:05.999999999Z
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t
+	}
+
+	// Format 2: RFC3339 - 2006-01-02T15:04:05Z
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+
+	// Format 3: With space instead of T - 2025-11-08 09:25:54.872Z (PocketBase format)
+	if t, err := time.Parse("2006-01-02 15:04:05.999Z", s); err == nil {
+		return t
+	}
+
+	// Format 4: With space, no milliseconds - 2025-11-08 09:25:54Z
+	if t, err := time.Parse("2006-01-02 15:04:05Z", s); err == nil {
+		return t
+	}
+
+	// Format 5: No timezone - 2025-11-08 09:25:54
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t
+	}
+
+	// Format 6: No timezone, with milliseconds
+	if t, err := time.Parse("2006-01-02 15:04:05.999", s); err == nil {
+		return t
+	}
+
+	// If all fails, log warning and return zero time
+	log.Printf("⚠️  parseTimeDB: failed to parse '%s' with any known format", s)
+	return time.Time{}
 }
 
 // ADD these methods for backward compatibility:

@@ -132,3 +132,27 @@ type ValidationError struct {
 func (e *ValidationError) Error() string {
 	return e.Field + ": " + e.Message
 }
+
+func IsTimeValid(t time.Time) bool {
+	return !t.IsZero() && t.Year() >= 2000
+}
+
+// IsNextCRPSet checks if NextCRP field is properly set
+func (r *Reminder) IsNextCRPSet() bool {
+	return IsTimeValid(r.NextCRP)
+}
+
+// IsLastSentAtSet checks if LastSentAt field is properly set
+func (r *Reminder) IsLastSentAtSet() bool {
+	return IsTimeValid(r.LastSentAt)
+}
+
+// IsNextRecurringSet checks if NextRecurring field is properly set
+func (r *Reminder) IsNextRecurringSet() bool {
+	return IsTimeValid(r.NextRecurring)
+}
+
+// IsSnoozeUntilActive checks if reminder is currently snoozed
+func (r *Reminder) IsSnoozeUntilActive(now time.Time) bool {
+	return IsTimeValid(r.SnoozeUntil) && r.SnoozeUntil.After(now)
+}

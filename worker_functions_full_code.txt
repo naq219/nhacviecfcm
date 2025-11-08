@@ -1,71 +1,14 @@
-package worker
+# TOÀN BỘ CODE WORKER FUNCTIONS - RemiAq Project
 
-import (
-	"context"
-	"errors"
-	"fmt"
-	"log"
-	"time"
-
-	"remiaq/internal/models"
-)
-
-// FCMSender sends FCM notifications
-type FCMSender interface {
-	SendNotification(token, title, body string) error
-}
-
-// UserRepo provides user operations
-type UserRepo interface {
-	GetByID(ctx context.Context, userID string) (*models.User, error)
-	DisableFCM(ctx context.Context, userID string) error
-	SetFCMError(ctx context.Context, userID string, errMsg string) error
-}
-
-// ReminderRepo provides reminder operations
-type ReminderRepo interface {
-	GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error)
-	Update(ctx context.Context, reminder *models.Reminder) error
-	UpdateCRPCount(ctx context.Context, id string, crpCount int) error
-	UpdateNextRecurring(ctx context.Context, id string, nextRecurring time.Time) error
-	UpdateNextCRP(ctx context.Context, id string, nextCRP time.Time) error
-	UpdateNextActionAt(ctx context.Context, id string, nextActionAt time.Time) error
-	UpdateLastSent(ctx context.Context, id string, lastSentAt string) error
-	UpdateStatus(ctx context.Context, id string, status string) error
-}
-
-// ScheduleCalc provides schedule calculation
-type ScheduleCalc interface {
-	CalculateNextActionAt(reminder *models.Reminder, now time.Time) time.Time
-	CalculateNextRecurring(reminder *models.Reminder, now time.Time) (time.Time, error)
-	CanSendCRP(reminder *models.Reminder, now time.Time) bool
-}
-
-// SystemStatusRepo provides system status operations
-type SystemStatusRepo interface {
-	IsWorkerEnabled(ctx context.Context) (bool, error)
-	UpdateError(ctx context.Context, errMsg string) error
-	ClearError(ctx context.Context) error
-	DisableWorker(ctx context.Context) error
-}
-
-// Worker processes reminders using FRP+CRP logic
-type Worker struct {
-	sysRepo      SystemStatusRepo
-	reminderRepo ReminderRepo
-	userRepo     UserRepo
-	fcmSender    FCMSender
-	schedCalc    ScheduleCalc
-	interval     time.Duration
-}
-
-// NewWorker creates a new worker
+## 1. NewWorker (Constructor)
+```go
+// NewWorker tạo worker mới với các dependency
 func NewWorker(
-	sysRepo SystemStatusRepo,
-	reminderRepo ReminderRepo,
-	userRepo UserRepo,
-	fcmSender FCMSender,
-	schedCalc ScheduleCalc,
+	sysRepo repository.SystemStatusRepository,
+	reminderRepo repository.ReminderRepository,
+	userRepo repository.UserRepository,
+	fcmSender services.FCMSender,
+	schedCalc services.ScheduleCalculator,
 	interval time.Duration,
 ) *Worker {
 	return &Worker{
@@ -77,21 +20,17 @@ func NewWorker(
 		interval:     interval,
 	}
 }
+```
 
-// Start launches the background loop
+## 2. Start Worker
+```go
+// Start khởi động worker với context có thể cancel
 func (w *Worker) Start(ctx context.Context) {
-	if w == nil {
-		return
-	}
-
-	if w.interval <= 0 {
-		w.interval = time.Minute
-	}
-
 	ticker := time.NewTicker(w.interval)
 	go func() {
 		defer ticker.Stop()
 		log.Printf("Worker started (interval=%s)", w.interval.String())
+		log.Printf("Worker config: interval=%d seconds", int(w.interval.Seconds()))
 
 		for {
 			select {
@@ -104,7 +43,10 @@ func (w *Worker) Start(ctx context.Context) {
 		}
 	}()
 }
+```
 
+## 3. runOnce - Xử lý một chu kỳ worker
+```go
 // runOnce processes a single worker cycle
 func (w *Worker) runOnce(ctx context.Context) {
 	// Check if enabled
@@ -153,26 +95,14 @@ func (w *Worker) runOnce(ctx context.Context) {
 		_ = w.sysRepo.ClearError(ctx)
 	}
 }
+```
 
-// processReminder processes a single reminder (FRP + CRP logic)
-// processReminder processes a single reminder (FRP + CRP logic)
+## 4. processReminder - Xử lý từng nhắc nhở
+```go
 // processReminder processes a single reminder (FRP + CRP logic)
 func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	// ========================================
-	// DEBUG: Log reminder state on load
-	// ========================================
-	log.Printf("📋 Loaded reminder %s: NextCRP=%v, LastSentAt=%v, CRPCount=%d, MaxCRP=%d",
-		reminder.ID,
-		reminder.NextCRP,
-		reminder.LastSentAt,
-		reminder.CRPCount,
-		reminder.MaxCRP)
-
-	// ========================================
-	// STEP 0: Check if snoozed
-	// ========================================
-	if reminder.IsSnoozeUntilActive(now) {
-		log.Printf("😴 Worker: Reminder %s is snoozed until %s", reminder.ID, reminder.SnoozeUntil.Format("15:04:05"))
+	// Skip snoozed reminders
+	if !reminder.SnoozeUntil.IsZero() && reminder.SnoozeUntil.After(now) {
 		// Recalc next_action_at and skip
 		nextAction := w.schedCalc.CalculateNextActionAt(reminder, now)
 		if !nextAction.Equal(reminder.NextActionAt) {
@@ -184,7 +114,7 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 	// ========================================
 	// STEP 1: Check FRP (has priority)
 	// ========================================
-	if reminder.Type == models.ReminderTypeRecurring && reminder.IsNextRecurringSet() {
+	if reminder.Type == models.ReminderTypeRecurring && !reminder.NextRecurring.IsZero() {
 		if now.After(reminder.NextRecurring) || now.Equal(reminder.NextRecurring) {
 			return w.processFRP(ctx, reminder, now)
 		}
@@ -207,7 +137,10 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 
 	return nil
 }
+```
 
+## 5. processFRP - Xử lý Father Recurrence Pattern
+```go
 // processFRP handles Father Recurrence Pattern trigger
 func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
 	log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
@@ -245,51 +178,38 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 	log.Printf("Worker: FRP processed. Next FRP: %s", reminder.NextRecurring)
 	return nil
 }
+```
 
-// processCRP handles Child Repeat Pattern (retry) trigger
+## 6. processCRP - Xử lý Child Repeat Pattern
+```go
 // processCRP handles Child Repeat Pattern (retry) trigger
 func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	log.Printf("🔔 Worker: CRP triggered for reminder %s (count: %d/%d)", reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
+	log.Printf("Worker: CRP triggered for reminder %s (count: %d/%d)", reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
 
 	// Send notification
 	if err := w.sendNotification(ctx, reminder); err != nil {
 		return err
 	}
 
-	// Update tracking - IMPORTANT: Update BOTH LastSentAt and NextCRP
+	// Update tracking
 	reminder.LastSentAt = now
 	reminder.CRPCount++
-
-	// Calculate next CRP trigger time (CRITICAL FIX!)
-	reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
 
 	// Check if one_time and reached quota
 	if reminder.Type == models.ReminderTypeOneTime {
 		if reminder.MaxCRP == 0 || reminder.CRPCount >= reminder.MaxCRP {
-			log.Printf("🏁 Worker: One-time reminder reached quota, marking completed")
+			log.Printf("Worker: One-time reminder reached quota, marking completed")
 			reminder.Status = models.ReminderStatusCompleted
 			reminder.LastCompletedAt = now
-			reminder.NextActionAt = time.Time{} // Clear next_action_at
-		} else {
-			// Still has quota, recalc next_action_at
-			reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
 		}
-	} else if reminder.Type == models.ReminderTypeRecurring {
-		// Recurring: Check if reached CRP quota
-		if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
-			log.Printf("⏸️  Worker: Recurring reminder CRP quota reached (%d/%d), waiting for FRP", reminder.CRPCount, reminder.MaxCRP)
-			// Quota reached: Don't recalc next_action_at yet
-			// Only FRP can advance, so next_action_at = next_recurring (if exists)
-			if !reminder.NextRecurring.IsZero() {
-				reminder.NextActionAt = reminder.NextRecurring
-			} else {
-				// No FRP set (shouldn't happen for recurring), clear it
-				reminder.NextActionAt = time.Time{}
-			}
-		} else {
-			// Still has CRP quota
-			reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
-		}
+	}
+
+	// Recalc next_action_at
+	if reminder.Status != models.ReminderStatusCompleted {
+		reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
+		reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
+	} else {
+		reminder.NextActionAt = time.Time{}
 	}
 
 	// Update DB
@@ -297,13 +217,13 @@ func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now 
 		return fmt.Errorf("failed to update reminder after CRP: %w", err)
 	}
 
-	log.Printf("✅ Worker: CRP processed (count=%d/%d). Next CRP: %s, NextActionAt: %s",
-		reminder.CRPCount, reminder.MaxCRP,
-		reminder.NextCRP.Format("15:04:05"),
-		reminder.NextActionAt.Format("15:04:05"))
+	log.Printf("Worker: CRP processed")
 	return nil
 }
+```
 
+## 7. sendNotification - Gửi thông báo FCM
+```go
 // sendNotification sends FCM notification to user
 func (w *Worker) sendNotification(ctx context.Context, reminder *models.Reminder) error {
 	user, err := w.userRepo.GetByID(ctx, reminder.UserID)
@@ -321,35 +241,66 @@ func (w *Worker) sendNotification(ctx context.Context, reminder *models.Reminder
 		if err != nil {
 			// Check if token error
 			if isTokenError(err.Error()) {
-				_ = w.userRepo.DisableFCM(ctx, user.ID)
-				return fmt.Errorf("token disabled: %w", err)
+				// Mark user as inactive
+				_ = w.userRepo.MarkFCMInactive(ctx, user.ID)
+				return fmt.Errorf("FCM token invalid, user marked inactive: %w", err)
 			}
-			// System error
-			_ = w.userRepo.SetFCMError(ctx, user.ID, err.Error())
-			return fmt.Errorf("fcm system error: %w", err)
+			return fmt.Errorf("failed to send FCM notification: %w", err)
 		}
 	}
 
 	return nil
 }
+```
 
-// ========================================
-// HELPERS
-// ========================================
-
-func isTokenError(errStr string) bool {
-	return errStr == "UNREGISTERED" ||
-		errStr == "INVALID_ARGUMENT" ||
-		errStr == "NOT_FOUND" ||
-		errStr == "user FCM not active"
-}
-
+## 8. Helper Functions
+```go
+// isSystemFCMError checks if error is a system-level FCM error
 func isSystemFCMError(err error) bool {
 	if err == nil {
 		return false
 	}
-
-	// System errors: auth, permission, timeout
-	return errors.Is(err, context.DeadlineExceeded) ||
-		errors.Is(err, context.Canceled)
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "credentials") ||
+		strings.Contains(msg, "configuration") ||
+		strings.Contains(msg, "permission")
 }
+
+// isTokenError checks if error is related to FCM token
+func isTokenError(errMsg string) bool {
+	msg := strings.ToLower(errMsg)
+	return strings.Contains(msg, "token") ||
+		strings.Contains(msg, "registration") ||
+		strings.Contains(msg, "not registered")
+}
+```
+
+## 9. Worker Struct Definition
+```go
+// Worker handles background processing of reminders
+type Worker struct {
+	sysRepo      repository.SystemStatusRepository
+	reminderRepo repository.ReminderRepository
+	userRepo     repository.UserRepository
+	fcmSender    services.FCMSender
+	schedCalc    services.ScheduleCalculator
+	interval     time.Duration
+}
+```
+
+## 📍 File Location
+Tất cả code trên nằm trong file: `internal/worker/worker.go`
+
+## 🔗 Dependencies
+- `repository` package: Database access
+- `services` package: Business logic và FCM
+- `models` package: Data structures
+- `time`: Xử lý thời gian
+- `log`: Logging
+- `fmt`: String formatting
+
+## ⚙️ Configuration
+Worker interval được cấu hình trong file `.env`:
+```env
+WORKER_INTERVAL=60  # Thời gian giữa các lần chạy (giây)
+```

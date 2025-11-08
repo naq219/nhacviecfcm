@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"time"
 
 	"remiaq/internal/models"
@@ -29,18 +30,22 @@ func (c *ScheduleCalculator) CalculateNextActionAt(reminder *models.Reminder, no
 	candidates := []time.Time{}
 
 	// 1. If snoozed, snooze_until has highest priority
-	if !reminder.SnoozeUntil.IsZero() && reminder.SnoozeUntil.After(now) {
+	if reminder.IsSnoozeUntilActive(now) {
 		return reminder.SnoozeUntil
 	}
 
 	// 2. For recurring: add next_recurring
-	if reminder.Type == models.ReminderTypeRecurring && !reminder.NextRecurring.IsZero() {
+	if reminder.Type == models.ReminderTypeRecurring && reminder.IsNextRecurringSet() {
 		candidates = append(candidates, reminder.NextRecurring)
 	}
 
 	// 3. For CRP: add next_crp if we haven't reached quota
 	if reminder.MaxCRP == 0 || reminder.CRPCount < reminder.MaxCRP {
-		if !reminder.LastSentAt.IsZero() {
+		if reminder.IsNextCRPSet() {
+			// Use NextCRP if it's set (most reliable)
+			candidates = append(candidates, reminder.NextCRP)
+		} else if reminder.IsLastSentAtSet() {
+			// Fallback: calculate from LastSentAt (shouldn't happen in normal flow)
 			nextCRP := reminder.LastSentAt.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
 			candidates = append(candidates, nextCRP)
 		} else {
@@ -81,7 +86,7 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 		current = now
 	}
 
-	// ⭐ NEW: Handle interval_seconds
+	// Handle interval_seconds
 	if pattern.Type == models.RecurrenceTypeIntervalSeconds {
 		return c.calculateNextIntervalSeconds(current, pattern, now)
 	}
@@ -112,7 +117,7 @@ func (c *ScheduleCalculator) calculateNextIntervalSeconds(current time.Time, pat
 	next := current
 
 	// Find first occurrence after now
-	for next.Before(now) || next.Equal(now) {
+	for !next.After(now) {
 		next = next.Add(interval)
 	}
 
@@ -136,7 +141,7 @@ func (c *ScheduleCalculator) calculateNextDaily(current time.Time, pattern *mode
 	}
 
 	next := current
-	for next.Before(now) || next.Equal(now) {
+	for !next.After(now) {
 		next = next.AddDate(0, 0, interval)
 	}
 
@@ -296,23 +301,60 @@ func (c *ScheduleCalculator) calculateNextLunarLastDay(current time.Time, patter
 // ========================================
 
 // CanSendCRP checks if we can send a CRP notification
-// Returns true if: quota not reached AND enough time passed since last send
+// Returns true if: quota not reached AND now >= next_crp
 func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time) bool {
 	// Check quota: if MaxCRP > 0, must not exceed it
 	if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
+		log.Printf("🚫 CRP quota reached for reminder %s (%d/%d)", reminder.ID, reminder.CRPCount, reminder.MaxCRP)
 		return false
 	}
 
-	// Check interval
-	if reminder.LastSentAt.IsZero() {
-		// First CRP: can send
+	// ========================================
+	// DEBUG: Log current state
+	// ========================================
+	log.Printf("🔍 CanSendCRP debug for %s: NextCRP=%s, LastSentAt=%s, IsNextCRPSet=%v, IsLastSentAtSet=%v",
+		reminder.ID,
+		reminder.NextCRP.Format("15:04:05"),
+		reminder.LastSentAt.Format("15:04:05"),
+		reminder.IsNextCRPSet(),
+		reminder.IsLastSentAtSet())
+
+	// ========================================
+	// CRITICAL FIX: Check NextCRP (set by processCRP)
+	// ========================================
+	if !reminder.IsNextCRPSet() {
+		// NextCRP not set = FIRST TIME ever (hasn't been sent yet)
+		// This means LastSentAt should also be empty
+		if !reminder.IsLastSentAtSet() {
+			log.Printf("📤 First CRP for reminder %s, allowing send", reminder.ID)
+			return true
+		}
+
+		// Edge case: LastSentAt is set but NextCRP is not
+		// Fallback: recalculate from LastSentAt
+		nextCRP := reminder.LastSentAt.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
+		if now.Before(nextCRP) {
+			remaining := nextCRP.Sub(now).Seconds()
+			log.Printf("⏳ CRP not ready (%.0fs remaining, fallback from LastSentAt)", remaining)
+			return false
+		}
+		log.Printf("✅ CRP ready (fallback calc from LastSentAt)")
 		return true
 	}
 
-	elapsed := now.Sub(reminder.LastSentAt)
-	required := time.Duration(reminder.CRPIntervalSec) * time.Second
+	// ========================================
+	// NORMAL CASE: NextCRP is properly set
+	// ========================================
+	if now.Before(reminder.NextCRP) {
+		remaining := reminder.NextCRP.Sub(now).Seconds()
+		log.Printf("⏳ CRP not ready yet for reminder %s (%.1fs remaining, next_crp=%s)",
+			reminder.ID, remaining, reminder.NextCRP.Format("15:04:05"))
+		return false
+	}
 
-	return elapsed >= required
+	log.Printf("✅ CRP ready for reminder %s (now=%s >= next_crp=%s)",
+		reminder.ID, now.Format("15:04:05"), reminder.NextCRP.Format("15:04:05"))
+	return true
 }
 
 // ========================================
