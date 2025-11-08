@@ -67,6 +67,7 @@ func main() {
 	reminderRepo := pbRepo.NewReminderORMRepo(app)
 	userRepo := pbRepo.NewUserORMRepo(app)
 	queryRepo := pbRepo.NewQueryRepo(app)
+	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 
 	// Initialize services
 	var fcmService *services.FCMService
@@ -86,13 +87,20 @@ func main() {
 	// Initialize handlers
 	reminderHandler := handlers.NewReminderHandler(reminderService)
 	queryHandler := handlers.NewQueryHandler(queryRepo)
-
-	// Initialize system status repo and start background worker
-	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
+
+	// Initialize and start background worker with all dependencies
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w := worker.NewWorker(sysRepo, reminderService, time.Duration(cfg.WorkerInterval)*time.Second)
+
+	w := worker.NewWorker(
+		sysRepo,         // SystemStatusRepo
+		reminderRepo,    // ReminderRepo
+		userRepo,        // UserRepo
+		fcmService,      // FCMSender
+		schedCalculator, // ScheduleCalc
+		time.Duration(cfg.WorkerInterval)*time.Second, // interval
+	)
 	w.Start(bgCtx)
 
 	// Setup routes
@@ -203,19 +211,19 @@ func main() {
 
 		se.Router.GET("/swagger/*", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			
+
 			// Get the requested file path
 			requestedFile := re.Request.PathValue("*")
 			if requestedFile == "" {
 				requestedFile = "swagger.json"
 			}
-			
+
 			// Read and serve the file
 			content, err := os.ReadFile("./docs/" + requestedFile)
 			if err != nil {
 				return re.String(404, "File not found: "+requestedFile)
 			}
-			
+
 			// Set appropriate content type
 			if len(requestedFile) > 5 && requestedFile[len(requestedFile)-5:] == ".json" {
 				re.Response.Header().Set("Content-Type", "application/json")
@@ -224,7 +232,7 @@ func main() {
 			} else {
 				re.Response.Header().Set("Content-Type", "text/html")
 			}
-			
+
 			return re.String(200, string(content))
 		})
 

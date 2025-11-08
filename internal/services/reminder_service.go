@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -35,16 +34,13 @@ func NewReminderService(
 
 // CreateReminder creates a new reminder
 func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.Reminder) error {
-	// Validate
 	if err := reminder.Validate(); err != nil {
 		return err
 	}
 
-	// PocketBase sẽ tự tạo ID (giới hạn 15 ký tự)
-	// Không tạo ID ở đây để tránh xung đột
 	reminder.ID = ""
 
-	// Set default values
+	// Set defaults
 	if reminder.Status == "" {
 		reminder.Status = models.ReminderStatusActive
 	}
@@ -54,15 +50,32 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 	if reminder.CalendarType == "" {
 		reminder.CalendarType = models.CalendarTypeSolar
 	}
-
-	// Calculate next trigger time if not set
-	if reminder.NextTriggerAt == "" {
-		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, time.Now())
-		if err != nil {
-			return err
-		}
-		reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
+	if reminder.MaxCRP == 0 {
+		reminder.MaxCRP = 0 // Default: send once
 	}
+	if reminder.CRPIntervalSec == 0 {
+		reminder.CRPIntervalSec = 0 // Will be set per reminder
+	}
+
+	now := time.Now().UTC()
+
+	// For one_time: set next_crp = now (send immediately)
+	if reminder.Type == models.ReminderTypeOneTime {
+		reminder.NextCRP = now
+		reminder.CRPCount = 0
+	} else {
+		// For recurring: calculate next_recurring from pattern
+		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
+		if err != nil {
+			return fmt.Errorf("failed to calculate next_recurring: %w", err)
+		}
+		reminder.NextRecurring = nextRecurring
+		reminder.NextCRP = nextRecurring // CRP starts at FRP time
+		reminder.CRPCount = 0
+	}
+
+	// Calculate next_action_at
+	reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
 
 	if err := s.reminderRepo.Create(ctx, reminder); err != nil {
 		return fmt.Errorf("failed to create reminder: %w", err)
@@ -78,13 +91,12 @@ func (s *ReminderService) GetReminder(ctx context.Context, id string) (*models.R
 
 // UpdateReminder updates a reminder
 func (s *ReminderService) UpdateReminder(ctx context.Context, reminder *models.Reminder) error {
-	// For partial updates, get the existing reminder first to validate only changed fields
 	existingReminder, err := s.reminderRepo.GetByID(ctx, reminder.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get existing reminder: %w", err)
 	}
 
-	// Merge the updates into the existing reminder
+	// Merge updates
 	if reminder.Title != "" {
 		existingReminder.Title = reminder.Title
 	}
@@ -97,58 +109,35 @@ func (s *ReminderService) UpdateReminder(ctx context.Context, reminder *models.R
 	if reminder.CalendarType != "" {
 		existingReminder.CalendarType = reminder.CalendarType
 	}
-	if reminder.NextTriggerAt != "" {
-		existingReminder.NextTriggerAt = reminder.NextTriggerAt
-	}
-	if reminder.TriggerTimeOfDay != "" {
-		existingReminder.TriggerTimeOfDay = reminder.TriggerTimeOfDay
-	}
 	if reminder.RecurrencePattern != nil {
 		existingReminder.RecurrencePattern = reminder.RecurrencePattern
 	}
 	if reminder.RepeatStrategy != "" {
 		existingReminder.RepeatStrategy = reminder.RepeatStrategy
 	}
-	if reminder.RetryIntervalSec != 0 {
-		existingReminder.RetryIntervalSec = reminder.RetryIntervalSec
+	if reminder.CRPIntervalSec != 0 {
+		existingReminder.CRPIntervalSec = reminder.CRPIntervalSec
 	}
-	if reminder.MaxRetries != 0 {
-		existingReminder.MaxRetries = reminder.MaxRetries
-	}
-	if reminder.RetryCount != 0 {
-		existingReminder.RetryCount = reminder.RetryCount
+	if reminder.MaxCRP != 0 {
+		existingReminder.MaxCRP = reminder.MaxCRP
 	}
 	if reminder.Status != "" {
 		existingReminder.Status = reminder.Status
 	}
-	if reminder.SnoozeUntil != "" {
-		existingReminder.SnoozeUntil = reminder.SnoozeUntil
-	}
-	if reminder.LastCompletedAt != "" {
-		existingReminder.LastCompletedAt = reminder.LastCompletedAt
-	}
-	if reminder.LastSentAt != "" {
-		existingReminder.LastSentAt = reminder.LastSentAt
-	}
-	
-	// Always preserve the user_id from existing reminder to prevent it from being cleared
-	if reminder.UserID != "" {
-		existingReminder.UserID = reminder.UserID
-	}
 
-	// Validate the merged reminder
 	if err := existingReminder.Validate(); err != nil {
 		return err
 	}
 
-	// Recalculate next trigger time if needed for recurring reminders
+	// If recurring and pattern changed, recalc next_recurring
 	if existingReminder.Type == models.ReminderTypeRecurring {
 		now := time.Now().UTC()
-		nextTriggerTime, err := s.schedCalculator.CalculateNextTrigger(existingReminder, now)
+		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(existingReminder, now)
 		if err != nil {
-			return fmt.Errorf("failed to calculate next trigger time for update: %w", err)
+			return fmt.Errorf("failed to calculate next_recurring: %w", err)
 		}
-		existingReminder.NextTriggerAt = nextTriggerTime.Format(time.RFC3339)
+		existingReminder.NextRecurring = nextRecurring
+		existingReminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(existingReminder, now)
 	}
 
 	return s.reminderRepo.Update(ctx, existingReminder)
@@ -164,169 +153,77 @@ func (s *ReminderService) GetUserReminders(ctx context.Context, userID string) (
 	return s.reminderRepo.GetByUserID(ctx, userID)
 }
 
-// SnoozeReminder postpones a reminder
+// SnoozeReminder snoozes a reminder for specified duration
 func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duration time.Duration) error {
-	snoozeUntil := time.Now().Add(duration)
-	return s.reminderRepo.UpdateSnooze(ctx, id, snoozeUntil.Format(time.RFC3339))
-}
-
-// CompleteReminder marks a reminder as completed
-func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error {
 	reminder, err := s.reminderRepo.GetByID(ctx, id)
 	if err != nil {
-		fmt.Printf("ERROR: CompleteReminder - failed to get reminder %s: %v\n", id, err)
 		return err
 	}
 
-	now := time.Now()
-	nowStr := now.Format(time.RFC3339)
-	reminder.LastCompletedAt = nowStr
-	reminder.Status = models.ReminderStatusCompleted
+	now := time.Now().UTC()
+	reminder.SnoozeUntil = now.Add(duration)
 
-	// For one-time reminders, we are done.
-	if reminder.Type == models.ReminderTypeOneTime {
-		if err := s.reminderRepo.Update(ctx, reminder); err != nil {
-			fmt.Printf("ERROR: CompleteReminder - failed to update one-time reminder %s: %v\n", id, err)
-			return err
-		}
-		fmt.Printf("INFO: CompleteReminder - successfully completed one-time reminder %s\n", id)
-		return nil
-	}
+	// Recalc next_action_at
+	reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
 
-	// For recurring reminders, calculate the next trigger
-	if reminder.Type == models.ReminderTypeRecurring {
-		nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, now)
-		if err != nil {
-			// Log the error but don't block completion
-			fmt.Printf("WARN: could not calculate next trigger for completed reminder %s: %v\n", reminder.ID, err)
-		} else {
-			reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
-			reminder.Status = models.ReminderStatusActive // Reset for the next cycle
-		}
-	}
-
-	if err := s.reminderRepo.Update(ctx, reminder); err != nil {
-		fmt.Printf("ERROR: CompleteReminder - failed to update recurring reminder %s: %v\n", id, err)
-		return err
-	}
-	fmt.Printf("INFO: CompleteReminder - successfully completed recurring reminder %s\n", id)
-	return nil
+	return s.reminderRepo.Update(ctx, reminder)
 }
 
-// ProcessDueReminders processes all reminders that are due (called by worker)
-func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
-	now := time.Now()
+// OnUserComplete handles user completing a reminder
+func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
+	reminder, err := s.reminderRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 
-	// Get all due reminders
+	now := time.Now().UTC()
+	reminder.LastCRPCompletedAt = now
+
+	if reminder.Type == models.ReminderTypeOneTime {
+		// Mark as completed
+		reminder.Status = models.ReminderStatusCompleted
+		reminder.LastCompletedAt = now
+	} else if reminder.Type == models.ReminderTypeRecurring {
+		// Reset CRP for current cycle
+		reminder.CRPCount = 0
+
+		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+			// Recalc next_recurring from now
+			nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
+			if err != nil {
+				// Log but don't fail
+				fmt.Printf("WARN: Failed to calc next_recurring on complete: %v\n", err)
+				nextRecurring = now.Add(24 * time.Hour)
+			}
+			reminder.NextRecurring = nextRecurring
+			reminder.NextCRP = nextRecurring
+		}
+
+		reminder.LastCompletedAt = now
+	}
+
+	// Recalc next_action_at
+	reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+
+	return s.reminderRepo.Update(ctx, reminder)
+}
+
+// CompleteReminder marks a reminder as completed (legacy, delegates to OnUserComplete)
+func (s *ReminderService) CompleteReminder(ctx context.Context, id string) error {
+	return s.OnUserComplete(ctx, id)
+}
+
+// ProcessDueReminders processes all active reminders that are due
+// Called by worker - NOT worker logic itself, just pre-processing
+func (s *ReminderService) ProcessDueReminders(ctx context.Context) error {
+	now := time.Now().UTC()
 	reminders, err := s.reminderRepo.GetDueReminders(ctx, now)
 	if err != nil {
 		return err
 	}
 
-	// Track if any system-level errors occurred during processing
-	systemErrorOccurred := false
-
-	for _, reminder := range reminders {
-		// Process each reminder
-		if err := s.processSingleDueReminder(ctx, reminder, now); err != nil {
-			// Distinguish device token errors from system-level errors
-			if !isTokenInvalidError(err) {
-				systemErrorOccurred = true
-				// Log detailed system error to terminal
-				fmt.Printf("SYSTEM FCM ERROR - Reminder %s: %v\n", reminder.ID, err)
-			} else {
-				// Log token error details
-				fmt.Printf("TOKEN ERROR - Reminder %s: %v\n", reminder.ID, err)
-			}
-			continue
-		}
-	}
-
-	if systemErrorOccurred {
-		return fmt.Errorf("system_fcm_error: %d reminders failed due to system errors", len(reminders))
-	}
+	// This just returns reminders, actual processing is in worker
+	// Note: Keep for compatibility if needed by old code
+	_ = reminders
 	return nil
-}
-
-// processSingleDueReminder processes a single reminder
-	func (s *ReminderService) processSingleDueReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-		// Get user
-		user, err := s.userRepo.GetByID(ctx, reminder.UserID)
-		if err != nil {
-			// Handle user not found error specifically
-			if err.Error() == "sql: no rows in result set" || err.Error() == "user not found" {
-				fmt.Printf("USER NOT FOUND ERROR - Reminder %s: user %s does not exist\n", reminder.ID, reminder.UserID)
-				return fmt.Errorf("user not found: %s", reminder.UserID)
-			}
-			return err
-		}
-
-		// Check if user has active FCM
-		if !user.IsFCMActive || user.FCMToken == "" {
-			fmt.Printf("USER FCM INACTIVE - Reminder %s: user %s has inactive FCM (is_fcm_active=%t, fcm_token='%s')\n", 
-				reminder.ID, reminder.UserID, user.IsFCMActive, user.FCMToken)
-			return errors.New("user FCM not active")
-		}
-
-	// Send notification (no-op if FCM service is not configured)
-	if s.fcmService != nil {
-		err = s.fcmService.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
-		if err != nil {
-			// Handle FCM errors
-			if isTokenInvalidError(err) {
-				// Disable FCM for this user
-				s.userRepo.DisableFCM(ctx, user.ID)
-			} else {
-				// Record FCM error in user record for non-token errors
-				s.userRepo.SetFCMError(ctx, user.ID, err.Error())
-			}
-			return err
-		}
-
-		// Update last_sent_at only when we actually sent something
-		s.reminderRepo.UpdateLastSent(ctx, reminder.ID, now.Format(time.RFC3339))
-	}
-
-	// Handle based on type
-	if reminder.Type == models.ReminderTypeOneTime {
-		return s.handleOneTimeReminder(ctx, reminder)
-	} else {
-		return s.handleRecurringReminder(ctx, reminder, now)
-	}
-}
-
-// handleOneTimeReminder handles one-time reminder logic after sending
-func (s *ReminderService) handleOneTimeReminder(ctx context.Context, reminder *models.Reminder) error {
-	// Mark as completed
-	reminder.Status = models.ReminderStatusCompleted
-	reminder.LastCompletedAt = time.Now().UTC().Format(time.RFC3339)
-	return s.reminderRepo.Update(ctx, reminder)
-}
-
-// handleRecurringReminder handles recurring reminder logic after sending
-func (s *ReminderService) handleRecurringReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	// For recurring reminders, calculate the next trigger time
-	nextTrigger, err := s.schedCalculator.CalculateNextTrigger(reminder, now)
-	if err != nil {
-		// Log the error but don't block the process
-		fmt.Printf("failed to calculate next trigger for reminder %s: %v\n", reminder.ID, err)
-		// Decide on a fallback, e.g., retry in 1 hour
-		nextTrigger = now.Add(1 * time.Hour)
-	}
-	reminder.NextTriggerAt = nextTrigger.Format(time.RFC3339)
-
-	// Update the reminder with the new next_trigger_at
-	return s.reminderRepo.Update(ctx, reminder)
-}
-
-// Helper function to check if FCM error is due to invalid token
-func isTokenInvalidError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return errStr == "UNREGISTERED" ||
-		errStr == "INVALID_ARGUMENT" ||
-		errStr == "NOT_FOUND" ||
-		errStr == "user FCM not active"
 }

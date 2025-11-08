@@ -89,14 +89,6 @@ func init() {
 			MaxSelect: 1,
 			Values:    []string{"solar", "lunar"},
 		})
-		remindersCollection.Fields.Add(&core.DateField{
-			Name:     "next_trigger_at",
-			Required: true,
-		})
-		remindersCollection.Fields.Add(&core.TextField{
-			Name:     "trigger_time_of_day",
-			Required: false,
-		})
 		remindersCollection.Fields.Add(&core.JSONField{
 			Name:     "recurrence_pattern",
 			Required: false,
@@ -105,36 +97,66 @@ func init() {
 			Name:      "repeat_strategy",
 			Required:  true,
 			MaxSelect: 1,
-			Values:    []string{"none", "retry_until_complete"},
+			Values:    []string{"none", "crp_until_complete"},
 		})
-		remindersCollection.Fields.Add(&core.NumberField{
-			Name:     "retry_interval_sec",
+
+		// FRP (Father Recurrence Pattern) fields
+		remindersCollection.Fields.Add(&core.DateField{
+			Name:     "next_recurring",
+			Required: false,
+		})
+
+		// CRP (Child Repeat Pattern) fields
+		remindersCollection.Fields.Add(&core.DateField{
+			Name:     "next_crp",
 			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.NumberField{
-			Name:     "max_retries",
+			Name:     "crp_interval_sec",
 			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.NumberField{
-			Name:     "retry_count",
+			Name:     "max_crp",
 			Required: false,
 		})
-		remindersCollection.Fields.Add(&core.SelectField{
-			Name:      "status",
-			Required:  true,
-			MaxSelect: 1,
-			Values:    []string{"active", "completed", "paused"},
+		remindersCollection.Fields.Add(&core.NumberField{
+			Name:     "crp_count",
+			Required: false,
+		})
+
+		// Tracking fields
+		remindersCollection.Fields.Add(&core.DateField{
+			Name:     "next_action_at",
+			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name: "snooze_until",
+			Name:     "last_sent_at",
+			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.DateField{
 			Name:     "last_completed_at",
 			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.DateField{
-			Name: "last_sent_at",
+			Name:     "last_crp_completed_at",
+			Required: false,
 		})
+
+		// Snooze
+		remindersCollection.Fields.Add(&core.DateField{
+			Name:     "snooze_until",
+			Required: false,
+		})
+
+		// Status
+		remindersCollection.Fields.Add(&core.SelectField{
+			Name:      "status",
+			Required:  true,
+			MaxSelect: 1,
+			Values:    []string{"active", "completed", "paused"},
+		})
+
+		// Timestamps
 		remindersCollection.Fields.Add(&core.AutodateField{
 			Name:     "created",
 			OnCreate: true,
@@ -148,20 +170,6 @@ func init() {
 		if err := app.Save(remindersCollection); err != nil {
 			return err
 		}
-
-		// Add optional DateFields sau khi tạo collection để tránh bug Pocketbase
-		// alterQueries := []string{
-		// 	`ALTER TABLE reminders ADD COLUMN last_completed_at TEXT DEFAULT NULL`,
-		// 	`ALTER TABLE reminders ADD COLUMN last_sent_at TEXT DEFAULT NULL`,
-		// 	`ALTER TABLE reminders ADD COLUMN snooze_until TEXT DEFAULT NULL`,
-		// }
-
-		// for _, query := range alterQueries {
-		// 	q := app.DB().NewQuery(query)
-		// 	if _, err := q.Execute(); err != nil {
-		// 		return fmt.Errorf("failed to add optional date fields: %w", err)
-		// 	}
-		// }
 
 		// Create system_status collection
 		systemStatusCollection := core.NewBaseCollection("system_status")

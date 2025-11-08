@@ -10,9 +10,9 @@ import (
 	"remiaq/internal/models"
 	"remiaq/internal/repository"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/dbx"
 )
 
 // ReminderORMRepo implements ReminderRepository using PocketBase ORM
@@ -31,24 +31,26 @@ func NewReminderORMRepo(app *pocketbase.PocketBase) repository.ReminderRepositor
 // recordToReminder converts a PocketBase Record to Reminder model
 func recordToReminder(record *core.Record) (*models.Reminder, error) {
 	reminder := &models.Reminder{
-		ID:               record.Id,
-		UserID:           record.GetString("user_id"),
-		Title:            record.GetString("title"),
-		Description:      record.GetString("description"),
-		Type:             record.GetString("type"),
-		CalendarType:     record.GetString("calendar_type"),
-		NextTriggerAt:    record.GetString("next_trigger_at"),
-		TriggerTimeOfDay: record.GetString("trigger_time_of_day"),
-		RepeatStrategy:   record.GetString("repeat_strategy"),
-		RetryIntervalSec: record.GetInt("retry_interval_sec"),
-		MaxRetries:       record.GetInt("max_retries"),
-		RetryCount:       record.GetInt("retry_count"),
-		Status:           record.GetString("status"),
-		SnoozeUntil:      record.GetString("snooze_until"),
-		LastCompletedAt:  record.GetString("last_completed_at"),
-		LastSentAt:       record.GetString("last_sent_at"),
-		Created:          record.GetDateTime("created").Time(),
-		Updated:          record.GetDateTime("updated").Time(),
+		ID:                 record.Id,
+		UserID:             record.GetString("user_id"),
+		Title:              record.GetString("title"),
+		Description:        record.GetString("description"),
+		Type:               record.GetString("type"),
+		CalendarType:       record.GetString("calendar_type"),
+		NextRecurring:      record.GetDateTime("next_recurring").Time(),
+		NextCRP:            record.GetDateTime("next_crp").Time(),
+		NextActionAt:       record.GetDateTime("next_action_at").Time(),
+		CRPIntervalSec:     record.GetInt("crp_interval_sec"),
+		MaxCRP:             record.GetInt("max_crp"),
+		CRPCount:           record.GetInt("crp_count"),
+		LastCRPCompletedAt: record.GetDateTime("last_crp_completed_at").Time(),
+		RepeatStrategy:     record.GetString("repeat_strategy"),
+		Status:             record.GetString("status"),
+		SnoozeUntil:        record.GetDateTime("snooze_until").Time(),
+		LastSentAt:         record.GetDateTime("last_sent_at").Time(),
+		LastCompletedAt:    record.GetDateTime("last_completed_at").Time(),
+		Created:            record.GetDateTime("created").Time(),
+		Updated:            record.GetDateTime("updated").Time(),
 	}
 
 	// Parse RecurrencePattern if present
@@ -71,16 +73,18 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 	record.Set("description", reminder.Description)
 	record.Set("type", reminder.Type)
 	record.Set("calendar_type", reminder.CalendarType)
-	record.Set("next_trigger_at", reminder.NextTriggerAt)
-	record.Set("trigger_time_of_day", reminder.TriggerTimeOfDay)
+	record.Set("next_recurring", reminder.NextRecurring)
+	record.Set("next_crp", reminder.NextCRP)
+	record.Set("next_action_at", reminder.NextActionAt)
+	record.Set("crp_interval_sec", reminder.CRPIntervalSec)
+	record.Set("max_crp", reminder.MaxCRP)
+	record.Set("crp_count", reminder.CRPCount)
+	record.Set("last_crp_completed_at", reminder.LastCRPCompletedAt)
 	record.Set("repeat_strategy", reminder.RepeatStrategy)
-	record.Set("retry_interval_sec", reminder.RetryIntervalSec)
-	record.Set("max_retries", reminder.MaxRetries)
-	record.Set("retry_count", reminder.RetryCount)
 	record.Set("status", reminder.Status)
 	record.Set("snooze_until", reminder.SnoozeUntil)
-	record.Set("last_completed_at", reminder.LastCompletedAt)
 	record.Set("last_sent_at", reminder.LastSentAt)
+	record.Set("last_completed_at", reminder.LastCompletedAt)
 
 	// Serialize RecurrencePattern if present
 	if reminder.RecurrencePattern != nil {
@@ -93,8 +97,6 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 
 	return nil
 }
-
-
 
 // Create creates a new reminder
 func (r *ReminderORMRepo) Create(ctx context.Context, reminder *models.Reminder) error {
@@ -162,39 +164,46 @@ func (r *ReminderORMRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetDueReminders retrieves reminders that are due before a given time
+// GetDueReminders retrieves reminders that need to be processed (next_action_at <= now AND not snoozed)
 func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error) {
 	type ReminderRecord struct {
-	ID               string         `db:"id"`
-	UserID           string         `db:"user_id"`
-	Title            string         `db:"title"`
-	Description      string         `db:"description"`
-	Type             string         `db:"type"`
-	CalendarType     string         `db:"calendar_type"`
-	NextTriggerAt    string         `db:"next_trigger_at"`
-	TriggerTimeOfDay string         `db:"trigger_time_of_day"`
-	RecurrenceJSON   sql.NullString `db:"recurrence_pattern"`
-	RepeatStrategy   string         `db:"repeat_strategy"`
-	RetryIntervalSec int            `db:"retry_interval_sec"`
-	MaxRetries       int            `db:"max_retries"`
-	RetryCount       int            `db:"retry_count"`
-	Status           string         `db:"status"`
-	SnoozeUntil      string         `db:"snooze_until"`
-	LastCompletedAt  string         `db:"last_completed_at"`
-	LastSentAt       string         `db:"last_sent_at"`
-	Created          string         `db:"created"`
-	Updated          string         `db:"updated"`
-}
+		ID                 string         `db:"id"`
+		UserID             string         `db:"user_id"`
+		Title              string         `db:"title"`
+		Description        string         `db:"description"`
+		Type               string         `db:"type"`
+		CalendarType       string         `db:"calendar_type"`
+		NextRecurring      string         `db:"next_recurring"`
+		NextCRP            string         `db:"next_crp"`
+		NextActionAt       string         `db:"next_action_at"`
+		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
+		CRPIntervalSec     int            `db:"crp_interval_sec"`
+		MaxCRP             int            `db:"max_crp"`
+		CRPCount           int            `db:"crp_count"`
+		LastCRPCompletedAt string         `db:"last_crp_completed_at"`
+		RepeatStrategy     string         `db:"repeat_strategy"`
+		Status             string         `db:"status"`
+		SnoozeUntil        string         `db:"snooze_until"`
+		LastSentAt         string         `db:"last_sent_at"`
+		LastCompletedAt    string         `db:"last_completed_at"`
+		Created            string         `db:"created"`
+		Updated            string         `db:"updated"`
+	}
 
 	records := []ReminderRecord{}
+
+	// Query: next_action_at <= now AND (snooze_until IS NULL OR snooze_until <= now) AND status = 'active'
 	err := r.app.DB().
 		Select("*").
 		From(reminderCollectionName).
-		Where(dbx.NewExp("next_trigger_at <= {:beforeTime}", dbx.Params{
+		Where(dbx.NewExp("next_action_at <= {:beforeTime}", dbx.Params{
 			"beforeTime": beforeTime.Format(time.RFC3339Nano),
 		})).
-		AndWhere(dbx.In("status", "active", "paused")).
-		OrderBy("next_trigger_at ASC").
+		AndWhere(dbx.NewExp("(snooze_until IS NULL OR snooze_until <= {:beforeTime})", dbx.Params{
+			"beforeTime": beforeTime.Format(time.RFC3339Nano),
+		})).
+		AndWhere(dbx.In("status", "active")).
+		OrderBy("next_action_at ASC").
 		All(&records)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query due reminders: %w", err)
@@ -203,97 +212,26 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 	reminders := make([]*models.Reminder, 0, len(records))
 	for _, rec := range records {
 		reminder := &models.Reminder{
-			ID:               rec.ID,
-			UserID:           rec.UserID,
-			Title:            rec.Title,
-			Description:      rec.Description,
-			Type:             rec.Type,
-			CalendarType:     rec.CalendarType,
-			NextTriggerAt:    rec.NextTriggerAt,
-			TriggerTimeOfDay: rec.TriggerTimeOfDay,
-			RepeatStrategy:   rec.RepeatStrategy,
-			RetryIntervalSec: rec.RetryIntervalSec,
-			MaxRetries:       rec.MaxRetries,
-			RetryCount:       rec.RetryCount,
-			Status:           rec.Status,
-			SnoozeUntil:      rec.SnoozeUntil,
-			LastCompletedAt:  rec.LastCompletedAt,
-			LastSentAt:       rec.LastSentAt,
-			Created:          parseTime(rec.Created),
-			Updated:          parseTime(rec.Updated),
-		}
-
-		// Parse RecurrencePattern if present
-	if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
-		var pattern models.RecurrencePattern
-		if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err != nil {
-			return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
-		}
-		reminder.RecurrencePattern = &pattern
-	}
-
-		reminders = append(reminders, reminder)
-	}
-
-	return reminders, nil
-}
-
-// GetByUserID retrieves all reminders for a specific user
-func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error) {
-	type ReminderRecord struct {
-		ID               string         `db:"id"`
-		UserID           string         `db:"user_id"`
-		Title            string         `db:"title"`
-		Description      string         `db:"description"`
-		Type             string         `db:"type"`
-		CalendarType     string         `db:"calendar_type"`
-		NextTriggerAt    string         `db:"next_trigger_at"`
-		TriggerTimeOfDay string         `db:"trigger_time_of_day"`
-		RecurrenceJSON   sql.NullString `db:"recurrence_pattern"`
-		RepeatStrategy   string         `db:"repeat_strategy"`
-		RetryIntervalSec int            `db:"retry_interval_sec"`
-		MaxRetries       int            `db:"max_retries"`
-		RetryCount       int            `db:"retry_count"`
-		Status           string         `db:"status"`
-		SnoozeUntil      string         `db:"snooze_until"`
-		LastCompletedAt  string         `db:"last_completed_at"`
-		LastSentAt       string         `db:"last_sent_at"`
-		Created          string         `db:"created"`
-		Updated          string         `db:"updated"`
-	}
-
-	records := []ReminderRecord{}
-	err := r.app.DB().
-		Select("*").
-		From(reminderCollectionName).
-		Where(dbx.HashExp{"user_id": userID}).
-		OrderBy("created DESC").
-		All(&records)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query reminders by user: %w", err)
-	}
-
-	reminders := make([]*models.Reminder, 0, len(records))
-	for _, rec := range records {
-		reminder := &models.Reminder{
-			ID:               rec.ID,
-			UserID:           rec.UserID,
-			Title:            rec.Title,
-			Description:      rec.Description,
-			Type:             rec.Type,
-			CalendarType:     rec.CalendarType,
-			NextTriggerAt:    rec.NextTriggerAt,
-			TriggerTimeOfDay: rec.TriggerTimeOfDay,
-			RepeatStrategy:   rec.RepeatStrategy,
-			RetryIntervalSec: rec.RetryIntervalSec,
-			MaxRetries:       rec.MaxRetries,
-			RetryCount:       rec.RetryCount,
-			Status:           rec.Status,
-			SnoozeUntil:      rec.SnoozeUntil,
-			LastCompletedAt:  rec.LastCompletedAt,
-			LastSentAt:       rec.LastSentAt,
-			Created:          parseTime(rec.Created),
-			Updated:          parseTime(rec.Updated),
+			ID:                 rec.ID,
+			UserID:             rec.UserID,
+			Title:              rec.Title,
+			Description:        rec.Description,
+			Type:               rec.Type,
+			CalendarType:       rec.CalendarType,
+			NextRecurring:      parseTimeDB(rec.NextRecurring),
+			NextCRP:            parseTimeDB(rec.NextCRP),
+			NextActionAt:       parseTimeDB(rec.NextActionAt),
+			CRPIntervalSec:     rec.CRPIntervalSec,
+			MaxCRP:             rec.MaxCRP,
+			CRPCount:           rec.CRPCount,
+			LastCRPCompletedAt: parseTimeDB(rec.LastCRPCompletedAt),
+			RepeatStrategy:     rec.RepeatStrategy,
+			Status:             rec.Status,
+			SnoozeUntil:        parseTimeDB(rec.SnoozeUntil),
+			LastSentAt:         parseTimeDB(rec.LastSentAt),
+			LastCompletedAt:    parseTimeDB(rec.LastCompletedAt),
+			Created:            parseTimeDB(rec.Created),
+			Updated:            parseTimeDB(rec.Updated),
 		}
 
 		// Parse RecurrencePattern if present
@@ -311,20 +249,81 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 	return reminders, nil
 }
 
-// UpdateNextTrigger updates the next trigger time for a reminder
-func (r *ReminderORMRepo) UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error {
-	record, err := r.app.FindRecordById(reminderCollectionName, id)
+// GetByUserID retrieves all reminders for a specific user
+func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*models.Reminder, error) {
+	type ReminderRecord struct {
+		ID                 string         `db:"id"`
+		UserID             string         `db:"user_id"`
+		Title              string         `db:"title"`
+		Description        string         `db:"description"`
+		Type               string         `db:"type"`
+		CalendarType       string         `db:"calendar_type"`
+		NextRecurring      string         `db:"next_recurring"`
+		NextCRP            string         `db:"next_crp"`
+		NextActionAt       string         `db:"next_action_at"`
+		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
+		CRPIntervalSec     int            `db:"crp_interval_sec"`
+		MaxCRP             int            `db:"max_crp"`
+		CRPCount           int            `db:"crp_count"`
+		LastCRPCompletedAt string         `db:"last_crp_completed_at"`
+		RepeatStrategy     string         `db:"repeat_strategy"`
+		Status             string         `db:"status"`
+		SnoozeUntil        string         `db:"snooze_until"`
+		LastSentAt         string         `db:"last_sent_at"`
+		LastCompletedAt    string         `db:"last_completed_at"`
+		Created            string         `db:"created"`
+		Updated            string         `db:"updated"`
+	}
+
+	records := []ReminderRecord{}
+	err := r.app.DB().
+		Select("*").
+		From(reminderCollectionName).
+		Where(dbx.HashExp{"user_id": userID}).
+		OrderBy("created DESC").
+		All(&records)
 	if err != nil {
-		return fmt.Errorf("reminder not found: %w", err)
+		return nil, fmt.Errorf("failed to query reminders by user: %w", err)
 	}
 
-	record.Set("next_trigger_at", nextTrigger.Format(time.RFC3339Nano))
+	reminders := make([]*models.Reminder, 0, len(records))
+	for _, rec := range records {
+		reminder := &models.Reminder{
+			ID:                 rec.ID,
+			UserID:             rec.UserID,
+			Title:              rec.Title,
+			Description:        rec.Description,
+			Type:               rec.Type,
+			CalendarType:       rec.CalendarType,
+			NextRecurring:      parseTimeDB(rec.NextRecurring),
+			NextCRP:            parseTimeDB(rec.NextCRP),
+			NextActionAt:       parseTimeDB(rec.NextActionAt),
+			CRPIntervalSec:     rec.CRPIntervalSec,
+			MaxCRP:             rec.MaxCRP,
+			CRPCount:           rec.CRPCount,
+			LastCRPCompletedAt: parseTimeDB(rec.LastCRPCompletedAt),
+			RepeatStrategy:     rec.RepeatStrategy,
+			Status:             rec.Status,
+			SnoozeUntil:        parseTimeDB(rec.SnoozeUntil),
+			LastSentAt:         parseTimeDB(rec.LastSentAt),
+			LastCompletedAt:    parseTimeDB(rec.LastCompletedAt),
+			Created:            parseTimeDB(rec.Created),
+			Updated:            parseTimeDB(rec.Updated),
+		}
 
-	if err := r.app.Save(record); err != nil {
-		return fmt.Errorf("failed to update next_trigger_at: %w", err)
+		// Parse RecurrencePattern if present
+		if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
+			var pattern models.RecurrencePattern
+			if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err != nil {
+				return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
+			}
+			reminder.RecurrencePattern = &pattern
+		}
+
+		reminders = append(reminders, reminder)
 	}
 
-	return nil
+	return reminders, nil
 }
 
 // UpdateStatus updates the status of a reminder
@@ -338,23 +337,6 @@ func (r *ReminderORMRepo) UpdateStatus(ctx context.Context, id string, status st
 
 	if err := r.app.Save(record); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
-	}
-
-	return nil
-}
-
-// IncrementRetryCount increments the retry count of a reminder
-func (r *ReminderORMRepo) IncrementRetryCount(ctx context.Context, id string) error {
-	record, err := r.app.FindRecordById(reminderCollectionName, id)
-	if err != nil {
-		return fmt.Errorf("reminder not found: %w", err)
-	}
-
-	currentCount := record.GetInt("retry_count")
-	record.Set("retry_count", currentCount+1)
-
-	if err := r.app.Save(record); err != nil {
-		return fmt.Errorf("failed to increment retry_count: %w", err)
 	}
 
 	return nil
@@ -407,4 +389,101 @@ func (r *ReminderORMRepo) UpdateLastSent(ctx context.Context, id string, lastSen
 	}
 
 	return nil
+}
+
+// UpdateCRPCount updates CRP count
+func (r *ReminderORMRepo) UpdateCRPCount(ctx context.Context, id string, crpCount int) error {
+	record, err := r.app.FindRecordById(reminderCollectionName, id)
+	if err != nil {
+		return fmt.Errorf("reminder not found: %w", err)
+	}
+
+	record.Set("crp_count", crpCount)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to update crp_count: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateNextRecurring updates next_recurring
+func (r *ReminderORMRepo) UpdateNextRecurring(ctx context.Context, id string, nextRecurring time.Time) error {
+	record, err := r.app.FindRecordById(reminderCollectionName, id)
+	if err != nil {
+		return fmt.Errorf("reminder not found: %w", err)
+	}
+
+	record.Set("next_recurring", nextRecurring)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to update next_recurring: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateNextCRP updates next_crp
+func (r *ReminderORMRepo) UpdateNextCRP(ctx context.Context, id string, nextCRP time.Time) error {
+	record, err := r.app.FindRecordById(reminderCollectionName, id)
+	if err != nil {
+		return fmt.Errorf("reminder not found: %w", err)
+	}
+
+	record.Set("next_crp", nextCRP)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to update next_crp: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateNextActionAt updates next_action_at
+func (r *ReminderORMRepo) UpdateNextActionAt(ctx context.Context, id string, nextActionAt time.Time) error {
+	record, err := r.app.FindRecordById(reminderCollectionName, id)
+	if err != nil {
+		return fmt.Errorf("reminder not found: %w", err)
+	}
+
+	record.Set("next_action_at", nextActionAt)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to update next_action_at: %w", err)
+	}
+
+	return nil
+}
+
+// parseTimeDB parses time string from DB
+func parseTimeDB(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, _ := time.Parse(time.RFC3339Nano, s)
+	return t
+}
+
+// ADD these methods for backward compatibility:
+
+// IncrementRetryCount increments CRP count (for backward compatibility)
+func (r *ReminderORMRepo) IncrementRetryCount(ctx context.Context, id string) error {
+	record, err := r.app.FindRecordById(reminderCollectionName, id)
+	if err != nil {
+		return fmt.Errorf("reminder not found: %w", err)
+	}
+
+	currentCount := record.GetInt("crp_count")
+	record.Set("crp_count", currentCount+1)
+
+	if err := r.app.Save(record); err != nil {
+		return fmt.Errorf("failed to increment crp_count: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateNextTrigger updates next_crp (for backward compatibility)
+func (r *ReminderORMRepo) UpdateNextTrigger(ctx context.Context, id string, nextTrigger time.Time) error {
+	return r.UpdateNextCRP(ctx, id, nextTrigger)
 }

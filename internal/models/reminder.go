@@ -12,29 +12,45 @@ type Reminder struct {
 	Description       string             `json:"description" db:"description"`
 	Type              string             `json:"type" db:"type"`                   // one_time, recurring
 	CalendarType      string             `json:"calendar_type" db:"calendar_type"` // solar, lunar
-	NextTriggerAt     string             `json:"next_trigger_at" db:"next_trigger_at"`
-	TriggerTimeOfDay  string             `json:"trigger_time_of_day" db:"trigger_time_of_day"` // HH:MM format
-	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern" db:"recurrence_pattern"`   // JSON field
-	RepeatStrategy    string             `json:"repeat_strategy" db:"repeat_strategy"`         // none, retry_until_complete
-	RetryIntervalSec  int                `json:"retry_interval_sec" db:"retry_interval_sec"`
-	MaxRetries        int                `json:"max_retries" db:"max_retries"`
-	RetryCount        int                `json:"retry_count" db:"retry_count"`
-	Status            string             `json:"status" db:"status"` // active, completed, paused
-	SnoozeUntil       string             `json:"snooze_until" db:"snooze_until"`
-	LastCompletedAt   string             `json:"last_completed_at" db:"last_completed_at"`
-	LastSentAt        string             `json:"last_sent_at" db:"last_sent_at"`
-	Created           time.Time          `json:"created" db:"created"`
-	Updated           time.Time          `json:"updated" db:"updated"`
+	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern" db:"recurrence_pattern"`
+
+	// FRP (Father Recurrence Pattern) - only for recurring
+	NextRecurring time.Time `json:"next_recurring" db:"next_recurring"`
+
+	// CRP (Child Repeat Pattern) - for both one_time and recurring
+	NextCRP            time.Time `json:"next_crp" db:"next_crp"`
+	CRPIntervalSec     int       `json:"crp_interval_sec" db:"crp_interval_sec"`
+	MaxCRP             int       `json:"max_crp" db:"max_crp"`
+	CRPCount           int       `json:"crp_count" db:"crp_count"`
+	LastCRPCompletedAt time.Time `json:"last_crp_completed_at" db:"last_crp_completed_at"`
+
+	// Repeat strategy
+	RepeatStrategy string `json:"repeat_strategy" db:"repeat_strategy"` // none, crp_until_complete
+
+	// Tracking
+	NextActionAt    time.Time `json:"next_action_at" db:"next_action_at"`
+	LastSentAt      time.Time `json:"last_sent_at" db:"last_sent_at"`
+	LastCompletedAt time.Time `json:"last_completed_at" db:"last_completed_at"`
+
+	// Snooze
+	SnoozeUntil time.Time `json:"snooze_until" db:"snooze_until"`
+
+	// Status
+	Status string `json:"status" db:"status"` // active, completed, paused
+
+	// Timestamps
+	Created time.Time `json:"created" db:"created"`
+	Updated time.Time `json:"updated" db:"updated"`
 }
 
 // RecurrencePattern defines how a reminder repeats
 type RecurrencePattern struct {
-	Type     string `json:"type"`                   // daily, weekly, monthly, lunar_last_day_of_month
-	Frequency string `json:"frequency,omitempty"`    // minute, hour, day, week, month
-	Interval  int    `json:"interval,omitempty"`     // For interval-based recurrence
-	DayOfMonth int    `json:"day_of_month,omitempty"` // For monthly recurrence
-	DayOfWeek  int    `json:"day_of_week,omitempty"`   // For weekly recurrence (0=Sunday)
-	BaseOn     string `json:"base_on,omitempty"`      // creation, completion
+	Type             string `json:"type"` // daily, weekly, monthly, lunar_last_day_of_month
+	Interval         int    `json:"interval,omitempty"`
+	DayOfMonth       int    `json:"day_of_month,omitempty"`
+	DayOfWeek        int    `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
+	CalendarType     string `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
+	TriggerTimeOfDay string `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
 }
 
 // User represents a user with FCM token
@@ -70,8 +86,8 @@ const (
 
 // Constants for repeat strategies
 const (
-	RepeatStrategyNone               = "none"
-	RepeatStrategyRetryUntilComplete = "retry_until_complete"
+	RepeatStrategyNone             = "none"
+	RepeatStrategyCRPUntilComplete = "crp_until_complete"
 )
 
 // Constants for reminder status
@@ -87,12 +103,6 @@ const (
 	RecurrenceTypeWeekly              = "weekly"
 	RecurrenceTypeMonthly             = "monthly"
 	RecurrenceTypeLunarLastDayOfMonth = "lunar_last_day_of_month"
-)
-
-// Constants for base_on
-const (
-	BaseOnCreation   = "creation"
-	BaseOnCompletion = "completion"
 )
 
 // Validate checks if reminder data is valid
@@ -117,39 +127,4 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return e.Field + ": " + e.Message
-}
-
-// IsRetryable checks if reminder can be retried
-func (r *Reminder) IsRetryable() bool {
-	return r.RepeatStrategy == RepeatStrategyRetryUntilComplete &&
-		r.RetryCount < r.MaxRetries
-}
-
-// ShouldSend checks if reminder should be sent now
-func (r *Reminder) ShouldSend(now time.Time) bool {
-	if r.Status != ReminderStatusActive {
-		return false
-	}
-
-	nowTime := now.UTC()
-
-	// Check snooze
-	if r.SnoozeUntil != "" {
-		snoozeTime, err := time.Parse(time.RFC3339, r.SnoozeUntil)
-		if err == nil && nowTime.Before(snoozeTime) {
-			return false
-		}
-	}
-
-	// Check trigger time
-	if r.NextTriggerAt == "" {
-		return false
-	}
-	triggerTime, err := time.Parse(time.RFC3339, r.NextTriggerAt)
-	if err != nil {
-		// Consider how to handle parse errors. For now, treat as not ready.
-		return false
-	}
-
-	return !nowTime.Before(triggerTime)
 }

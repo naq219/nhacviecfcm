@@ -7,7 +7,7 @@ import (
 	"remiaq/internal/models"
 )
 
-// ScheduleCalculator calculates next trigger times for reminders
+// ScheduleCalculator calculates next trigger times for reminders (FRP & CRP)
 type ScheduleCalculator struct {
 	lunarCalendar *LunarCalendar
 }
@@ -19,238 +19,249 @@ func NewScheduleCalculator(lunarCalendar *LunarCalendar) *ScheduleCalculator {
 	}
 }
 
-// convertFrequencyToSeconds converts frequency and interval to seconds
-func (c *ScheduleCalculator) convertFrequencyToSeconds(frequency string, interval int) int {
-	switch frequency {
-	case "minute":
-		return interval * 60
-	case "hour":
-		return interval * 60 * 60
-	case "day":
-		return interval * 24 * 60 * 60
-	case "week":
-		return interval * 7 * 24 * 60 * 60
-	case "month":
-		return interval * 30 * 24 * 60 * 60 // Approximate 30 days per month
-	default:
-		return 0
-	}
-}
+// ========================================
+// MAIN: CalculateNextActionAt
+// ========================================
 
-// CalculateNextTrigger calculates the next trigger time for a reminder
-func (c *ScheduleCalculator) CalculateNextTrigger(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	if reminder.Type == models.ReminderTypeOneTime {
-		return c.calculateOneTime(reminder, fromTime)
+// CalculateNextActionAt calculates the nearest time to check this reminder
+// Returns the minimum of: snooze_until, next_recurring, next_crp
+func (c *ScheduleCalculator) CalculateNextActionAt(reminder *models.Reminder, now time.Time) time.Time {
+	candidates := []time.Time{}
+
+	// 1. If snoozed, snooze_until has highest priority
+	if !reminder.SnoozeUntil.IsZero() && reminder.SnoozeUntil.After(now) {
+		return reminder.SnoozeUntil
 	}
 
-	return c.calculateRecurring(reminder, fromTime)
-}
-
-// calculateOneTime calculates next trigger for one-time reminders
-func (c *ScheduleCalculator) calculateOneTime(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	// For one-time reminders, return the set trigger time
-	if reminder.NextTriggerAt != "" {
-		return time.Parse(time.RFC3339, reminder.NextTriggerAt)
+	// 2. For recurring: add next_recurring
+	if reminder.Type == models.ReminderTypeRecurring && !reminder.NextRecurring.IsZero() {
+		candidates = append(candidates, reminder.NextRecurring)
 	}
 
-	return fromTime, nil
+	// 3. For CRP: add next_crp if we haven't reached quota
+	if reminder.MaxCRP == 0 || reminder.CRPCount < reminder.MaxCRP {
+		if !reminder.LastSentAt.IsZero() {
+			nextCRP := reminder.LastSentAt.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
+			candidates = append(candidates, nextCRP)
+		} else {
+			// First CRP: send immediately
+			candidates = append(candidates, now)
+		}
+	}
+
+	// 4. Return the earliest candidate
+	if len(candidates) == 0 {
+		return time.Time{}
+	}
+
+	minTime := candidates[0]
+	for _, t := range candidates[1:] {
+		if t.Before(minTime) {
+			minTime = t
+		}
+	}
+
+	return minTime
 }
 
-// calculateRecurring calculates next trigger for recurring reminders
-func (c *ScheduleCalculator) calculateRecurring(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
+// ========================================
+// FRP: CalculateNextRecurring
+// ========================================
+
+// CalculateNextRecurring calculates the next recurring trigger time
+// Starts from current NextRecurring and finds first occurrence after now
+func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, now time.Time) (time.Time, error) {
 	if reminder.RecurrencePattern == nil {
-		return time.Time{}, errors.New("recurrence pattern is required for recurring reminders")
+		return time.Time{}, errors.New("recurrence_pattern required for recurring reminder")
 	}
 
 	pattern := reminder.RecurrencePattern
+	current := reminder.NextRecurring
 
-	// Handle interval-based recurrence
-	if pattern.Frequency != "" && pattern.Interval > 0 {
-		return c.calculateIntervalBased(reminder, fromTime)
+	if current.IsZero() {
+		current = now
 	}
 
-	// Handle calendar-based recurrence
 	switch pattern.Type {
 	case models.RecurrenceTypeDaily:
-		return c.calculateDaily(reminder, fromTime)
+		return c.calculateNextDaily(current, pattern, now)
+
 	case models.RecurrenceTypeWeekly:
-		return c.calculateWeekly(reminder, fromTime)
+		return c.calculateNextWeekly(current, pattern, now)
+
 	case models.RecurrenceTypeMonthly:
-		return c.calculateMonthly(reminder, fromTime)
+		if reminder.CalendarType == models.CalendarTypeLunar {
+			return c.calculateNextLunarMonthly(current, pattern, now)
+		}
+		return c.calculateNextSolarMonthly(current, pattern, now)
+
 	case models.RecurrenceTypeLunarLastDayOfMonth:
-		return c.calculateLunarLastDay(reminder, fromTime)
+		return c.calculateNextLunarLastDay(current, pattern, now)
+
 	default:
 		return time.Time{}, errors.New("unsupported recurrence type")
 	}
 }
 
-// calculateIntervalBased calculates next trigger based on interval
-func (c *ScheduleCalculator) calculateIntervalBased(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	intervalSeconds := c.convertFrequencyToSeconds(reminder.RecurrencePattern.Frequency, reminder.RecurrencePattern.Interval)
-	interval := time.Duration(intervalSeconds) * time.Second
+// calculateNextDaily: Add interval days, find first > now
+func (c *ScheduleCalculator) calculateNextDaily(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	interval := pattern.Interval
+	if interval <= 0 {
+		interval = 1
+	}
 
-	// If base_on is completion, calculate from completion time
-	if reminder.RecurrencePattern.BaseOn == models.BaseOnCompletion {
-		if reminder.LastCompletedAt != "" {
-			lastCompleted, err := time.Parse(time.RFC3339, reminder.LastCompletedAt)
-			if err != nil {
-				// Fallback to creation time if parse fails
-				return reminder.Created.Add(interval), nil
-			}
-			return lastCompleted.Add(interval), nil
+	// Get trigger time of day (HH:MM), default 00:00
+	var hour, minute int
+	if pattern.TriggerTimeOfDay != "" {
+		t, err := parseTimeOfDay(pattern.TriggerTimeOfDay)
+		if err == nil {
+			hour, minute = t.Hour(), t.Minute()
 		}
-		// If never completed, use creation time
-		return reminder.Created.Add(interval), nil
 	}
 
-	// Otherwise, calculate from last trigger time (creation-based)
-	return fromTime.Add(interval), nil
-}
-
-// calculateDaily calculates next daily trigger
-func (c *ScheduleCalculator) calculateDaily(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	if reminder.TriggerTimeOfDay == "" {
-		return time.Time{}, errors.New("trigger_time_of_day is required for daily recurrence")
+	next := current
+	for next.Before(now) || next.Equal(now) {
+		next = next.AddDate(0, 0, interval)
 	}
 
-	// Parse time of day (HH:MM format)
-	targetTime, err := parseTimeOfDay(reminder.TriggerTimeOfDay)
-	if err != nil {
-		return time.Time{}, err
-	}
+	// Apply time of day
+	next = time.Date(next.Year(), next.Month(), next.Day(), hour, minute, 0, 0, next.Location())
 
-	// Calculate next occurrence
-	next := time.Date(
-		fromTime.Year(), fromTime.Month(), fromTime.Day(),
-		targetTime.Hour(), targetTime.Minute(), 0, 0,
-		fromTime.Location(),
-	)
-
-	// If the time has passed today, move to tomorrow
-	if next.Before(fromTime) || next.Equal(fromTime) {
-		next = next.Add(24 * time.Hour)
+	// Make sure it's still after now
+	for !next.After(now) {
+		next = next.AddDate(0, 0, interval)
 	}
 
 	return next, nil
 }
 
-// calculateWeekly calculates next weekly trigger
-func (c *ScheduleCalculator) calculateWeekly(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	if reminder.TriggerTimeOfDay == "" {
-		return time.Time{}, errors.New("trigger_time_of_day is required for weekly recurrence")
-	}
-
-	pattern := reminder.RecurrencePattern
+// calculateNextWeekly: Find next target weekday, find first > now
+func (c *ScheduleCalculator) calculateNextWeekly(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
 	targetWeekday := time.Weekday(pattern.DayOfWeek)
-
-	// Parse time of day
-	targetTime, err := parseTimeOfDay(reminder.TriggerTimeOfDay)
-	if err != nil {
-		return time.Time{}, err
+	interval := pattern.Interval
+	if interval <= 0 {
+		interval = 1
 	}
 
-	// Find next occurrence of target weekday
-	daysUntilTarget := (int(targetWeekday) - int(fromTime.Weekday()) + 7) % 7
-	if daysUntilTarget == 0 {
-		// It's the target day, check if time has passed
-		next := time.Date(
-			fromTime.Year(), fromTime.Month(), fromTime.Day(),
-			targetTime.Hour(), targetTime.Minute(), 0, 0,
-			fromTime.Location(),
-		)
-		if next.After(fromTime) {
-			return next, nil
+	// Get trigger time of day
+	var hour, minute int
+	if pattern.TriggerTimeOfDay != "" {
+		t, err := parseTimeOfDay(pattern.TriggerTimeOfDay)
+		if err == nil {
+			hour, minute = t.Hour(), t.Minute()
 		}
-		daysUntilTarget = 7
 	}
 
-	next := fromTime.Add(time.Duration(daysUntilTarget) * 24 * time.Hour)
-	next = time.Date(
-		next.Year(), next.Month(), next.Day(),
-		targetTime.Hour(), targetTime.Minute(), 0, 0,
-		next.Location(),
-	)
+	next := current
+	for !next.After(now) {
+		// Find next target weekday
+		daysUntil := (int(targetWeekday) - int(next.Weekday()) + 7) % 7
+		if daysUntil == 0 {
+			daysUntil = 7 * interval
+		} else {
+			daysUntil = daysUntil + (7 * (interval - 1))
+		}
+		next = next.AddDate(0, 0, daysUntil)
+		next = time.Date(next.Year(), next.Month(), next.Day(), hour, minute, 0, 0, next.Location())
+	}
 
 	return next, nil
 }
 
-// calculateMonthly calculates next monthly trigger
-func (c *ScheduleCalculator) calculateMonthly(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	pattern := reminder.RecurrencePattern
-
-	if reminder.CalendarType == models.CalendarTypeLunar {
-		return c.calculateLunarMonthly(reminder, fromTime)
+// calculateNextSolarMonthly: Add interval months on day_of_month, find first > now
+func (c *ScheduleCalculator) calculateNextSolarMonthly(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	dayOfMonth := pattern.DayOfMonth
+	if dayOfMonth <= 0 {
+		dayOfMonth = 1
+	}
+	interval := pattern.Interval
+	if interval <= 0 {
+		interval = 1
 	}
 
-	// Solar calendar
-	if reminder.TriggerTimeOfDay == "" {
-		return time.Time{}, errors.New("trigger_time_of_day is required for monthly recurrence")
+	// Get trigger time of day
+	var hour, minute int
+	if pattern.TriggerTimeOfDay != "" {
+		t, err := parseTimeOfDay(pattern.TriggerTimeOfDay)
+		if err == nil {
+			hour, minute = t.Hour(), t.Minute()
+		}
 	}
 
-	targetTime, err := parseTimeOfDay(reminder.TriggerTimeOfDay)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// Try current month first
-	next := time.Date(
-		fromTime.Year(), fromTime.Month(), pattern.DayOfMonth,
-		targetTime.Hour(), targetTime.Minute(), 0, 0,
-		fromTime.Location(),
-	)
-
-	// If date doesn't exist in current month or has passed, move to next month
-	if next.Day() != pattern.DayOfMonth || next.Before(fromTime) || next.Equal(fromTime) {
-		next = time.Date(
-			fromTime.Year(), fromTime.Month()+1, pattern.DayOfMonth,
-			targetTime.Hour(), targetTime.Minute(), 0, 0,
-			fromTime.Location(),
-		)
-
-		// Handle year rollover
-		if next.Day() != pattern.DayOfMonth {
-			next = time.Date(
-				fromTime.Year()+1, time.January, pattern.DayOfMonth,
-				targetTime.Hour(), targetTime.Minute(), 0, 0,
-				fromTime.Location(),
-			)
+	next := current
+	for !next.After(now) {
+		next = next.AddDate(0, interval, 0)
+		// Set to day_of_month (may be adjusted if day doesn't exist in month)
+		next = time.Date(next.Year(), next.Month(), dayOfMonth, hour, minute, 0, 0, next.Location())
+		// Re-adjust if day overflowed to next month
+		if next.Day() != dayOfMonth {
+			next = time.Date(next.Year(), next.Month(), 1, hour, minute, 0, 0, next.Location()).AddDate(0, 1, -1)
 		}
 	}
 
 	return next, nil
 }
 
-// calculateLunarMonthly calculates next lunar monthly trigger
-func (c *ScheduleCalculator) calculateLunarMonthly(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	pattern := reminder.RecurrencePattern
-	targetDay := pattern.DayOfMonth
+// calculateNextLunarMonthly: Similar to solar but using lunar calendar
+func (c *ScheduleCalculator) calculateNextLunarMonthly(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	dayOfMonth := pattern.DayOfMonth
+	if dayOfMonth <= 0 {
+		dayOfMonth = 1
+	}
+	interval := pattern.Interval
+	if interval <= 0 {
+		interval = 1
+	}
 
-	// Convert current solar date to lunar
-	lunarDate := c.lunarCalendar.SolarToLunar(fromTime)
+	lunarDate := c.lunarCalendar.SolarToLunar(current)
 
-	// Try to find the target day in current or next lunar month
-	for i := 0; i < 13; i++ { // Max 13 lunar months in a year
-		// Check if target day exists in current lunar month
+	// Try up to 24 lunar months
+	for i := 0; i < 24; i++ {
 		daysInMonth := c.lunarCalendar.GetLunarMonthDays(lunarDate.Year, lunarDate.Month)
+		if dayOfMonth > daysInMonth {
+			dayOfMonth = daysInMonth
+		}
 
-		if targetDay <= daysInMonth {
-			// Convert lunar date to solar
-			solarDate := c.lunarCalendar.LunarToSolar(lunarDate.Year, lunarDate.Month, targetDay)
+		solarDate := c.lunarCalendar.LunarToSolar(lunarDate.Year, lunarDate.Month, dayOfMonth)
 
-			// Apply time of day
-			if reminder.TriggerTimeOfDay != "" {
-				targetTime, _ := parseTimeOfDay(reminder.TriggerTimeOfDay)
-				solarDate = time.Date(
-					solarDate.Year(), solarDate.Month(), solarDate.Day(),
-					targetTime.Hour(), targetTime.Minute(), 0, 0,
-					solarDate.Location(),
-				)
-			}
+		// Apply time of day
+		if pattern.TriggerTimeOfDay != "" {
+			t, _ := parseTimeOfDay(pattern.TriggerTimeOfDay)
+			solarDate = time.Date(solarDate.Year(), solarDate.Month(), solarDate.Day(), t.Hour(), t.Minute(), 0, 0, solarDate.Location())
+		}
 
-			// If this date is in the future, return it
-			if solarDate.After(fromTime) {
-				return solarDate, nil
-			}
+		if solarDate.After(now) {
+			return solarDate, nil
+		}
+
+		// Move to next lunar month
+		lunarDate.Month += interval
+		if lunarDate.Month > 12 {
+			lunarDate.Year += (lunarDate.Month - 1) / 12
+			lunarDate.Month = ((lunarDate.Month - 1) % 12) + 1
+		}
+	}
+
+	return time.Time{}, errors.New("failed to calculate next lunar monthly trigger")
+}
+
+// calculateNextLunarLastDay: Last day of lunar month, find first > now
+func (c *ScheduleCalculator) calculateNextLunarLastDay(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	lunarDate := c.lunarCalendar.SolarToLunar(current)
+
+	// Try up to 24 lunar months
+	for i := 0; i < 24; i++ {
+		daysInMonth := c.lunarCalendar.GetLunarMonthDays(lunarDate.Year, lunarDate.Month)
+		solarDate := c.lunarCalendar.LunarToSolar(lunarDate.Year, lunarDate.Month, daysInMonth)
+
+		// Apply time of day
+		if pattern.TriggerTimeOfDay != "" {
+			t, _ := parseTimeOfDay(pattern.TriggerTimeOfDay)
+			solarDate = time.Date(solarDate.Year(), solarDate.Month(), solarDate.Day(), t.Hour(), t.Minute(), 0, 0, solarDate.Location())
+		}
+
+		if solarDate.After(now) {
+			return solarDate, nil
 		}
 
 		// Move to next lunar month
@@ -261,51 +272,36 @@ func (c *ScheduleCalculator) calculateLunarMonthly(reminder *models.Reminder, fr
 		}
 	}
 
-	return time.Time{}, errors.New("failed to calculate next lunar monthly trigger")
+	return time.Time{}, errors.New("failed to calculate next lunar last day trigger")
 }
 
-// calculateLunarLastDay calculates last day of lunar month
-func (c *ScheduleCalculator) calculateLunarLastDay(reminder *models.Reminder, fromTime time.Time) (time.Time, error) {
-	lunarDate := c.lunarCalendar.SolarToLunar(fromTime)
+// ========================================
+// CRP: CanSendCRP
+// ========================================
 
-	// Try current month first
-	daysInMonth := c.lunarCalendar.GetLunarMonthDays(lunarDate.Year, lunarDate.Month)
-	solarDate := c.lunarCalendar.LunarToSolar(lunarDate.Year, lunarDate.Month, daysInMonth)
-
-	if reminder.TriggerTimeOfDay != "" {
-		targetTime, _ := parseTimeOfDay(reminder.TriggerTimeOfDay)
-		solarDate = time.Date(
-			solarDate.Year(), solarDate.Month(), solarDate.Day(),
-			targetTime.Hour(), targetTime.Minute(), 0, 0,
-			solarDate.Location(),
-		)
+// CanSendCRP checks if we can send a CRP notification
+// Returns true if: quota not reached AND enough time passed since last send
+func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time) bool {
+	// Check quota: if MaxCRP > 0, must not exceed it
+	if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
+		return false
 	}
 
-	if solarDate.After(fromTime) {
-		return solarDate, nil
+	// Check interval
+	if reminder.LastSentAt.IsZero() {
+		// First CRP: can send
+		return true
 	}
 
-	// Try next month
-	lunarDate.Month++
-	if lunarDate.Month > 12 {
-		lunarDate.Month = 1
-		lunarDate.Year++
-	}
+	elapsed := now.Sub(reminder.LastSentAt)
+	required := time.Duration(reminder.CRPIntervalSec) * time.Second
 
-	daysInMonth = c.lunarCalendar.GetLunarMonthDays(lunarDate.Year, lunarDate.Month)
-	solarDate = c.lunarCalendar.LunarToSolar(lunarDate.Year, lunarDate.Month, daysInMonth)
-
-	if reminder.TriggerTimeOfDay != "" {
-		targetTime, _ := parseTimeOfDay(reminder.TriggerTimeOfDay)
-		solarDate = time.Date(
-			solarDate.Year(), solarDate.Month(), solarDate.Day(),
-			targetTime.Hour(), targetTime.Minute(), 0, 0,
-			solarDate.Location(),
-		)
-	}
-
-	return solarDate, nil
+	return elapsed >= required
 }
+
+// ========================================
+// HELPER
+// ========================================
 
 // parseTimeOfDay parses HH:MM format
 func parseTimeOfDay(timeStr string) (time.Time, error) {

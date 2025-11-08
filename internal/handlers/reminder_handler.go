@@ -22,6 +22,7 @@ type ReminderServiceInterface interface {
 	GetUserReminders(ctx context.Context, userID string) ([]*models.Reminder, error)
 	SnoozeReminder(ctx context.Context, id string, duration time.Duration) error
 	CompleteReminder(ctx context.Context, id string) error
+	OnUserComplete(ctx context.Context, id string) error
 	ProcessDueReminders(ctx context.Context) error
 }
 
@@ -68,7 +69,6 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 
 	reminder.UserID = authRecord.Id
 
-	// Create reminder
 	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
 		return utils.SendError(re, 400, "Failed to create reminder", err)
 	}
@@ -261,7 +261,7 @@ func (h *ReminderHandler) CompleteReminder(re *core.RequestEvent) error {
 		return utils.SendError(re, 400, "Reminder ID is required", nil)
 	}
 
-	if err := h.reminderService.CompleteReminder(re.Request.Context(), id); err != nil {
+	if err := h.reminderService.OnUserComplete(re.Request.Context(), id); err != nil {
 		return utils.SendError(re, 400, "Failed to complete reminder", err)
 	}
 
