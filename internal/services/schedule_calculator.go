@@ -56,7 +56,10 @@ func (c *ScheduleCalculator) CalculateNextActionAt(reminder *models.Reminder, no
 
 	// 4. Return the earliest candidate
 	if len(candidates) == 0 {
-		return time.Time{}
+		// SAFETY: If no candidates, set to now (will be processed immediately)
+		// This prevents zero time which causes infinite loops
+		log.Printf("⚠️  CalculateNextActionAt: No candidates for %s, returning now", reminder.ID)
+		return now
 	}
 
 	minTime := candidates[0]
