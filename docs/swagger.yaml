@@ -1,4 +1,98 @@
 basePath: /
+definitions:
+  handlers.SnoozeRequest:
+    properties:
+      duration:
+        description: Duration in seconds
+        type: integer
+    type: object
+  models.RecurrencePattern:
+    properties:
+      base_on:
+        description: creation, completion
+        type: string
+      day_of_month:
+        description: For monthly recurrence
+        type: integer
+      day_of_week:
+        description: For weekly recurrence (0=Sunday)
+        type: integer
+      frequency:
+        description: minute, hour, day, week, month
+        type: string
+      interval:
+        description: For interval-based recurrence
+        type: integer
+      type:
+        description: daily, weekly, monthly, lunar_last_day_of_month
+        type: string
+    type: object
+  models.Reminder:
+    properties:
+      calendar_type:
+        description: solar, lunar
+        type: string
+      created:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      last_completed_at:
+        type: string
+      last_sent_at:
+        type: string
+      max_retries:
+        type: integer
+      next_trigger_at:
+        type: string
+      recurrence_pattern:
+        allOf:
+        - $ref: '#/definitions/models.RecurrencePattern'
+        description: JSON field
+      repeat_strategy:
+        description: none, retry_until_complete
+        type: string
+      retry_count:
+        type: integer
+      retry_interval_sec:
+        type: integer
+      snooze_until:
+        type: string
+      status:
+        description: active, completed, paused
+        type: string
+      title:
+        type: string
+      trigger_time_of_day:
+        description: HH:MM format
+        type: string
+      type:
+        description: one_time, recurring
+        type: string
+      updated:
+        type: string
+      user_id:
+        type: string
+    type: object
+  utils.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        additionalProperties: true
+        type: object
+      message:
+        type: string
+    type: object
+  utils.SuccessResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -15,7 +109,218 @@ info:
   termsOfService: http://swagger.io/terms/
   title: RemiAq API
   version: "1.0"
-paths: {}
+paths:
+  /api/reminders:
+    post:
+      consumes:
+      - application/json
+      description: Create a new reminder for the authenticated user
+      parameters:
+      - description: Reminder object
+        in: body
+        name: reminder
+        required: true
+        schema:
+          $ref: '#/definitions/models.Reminder'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Reminder'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Create a new reminder
+      tags:
+      - reminders
+  /api/reminders/{id}:
+    delete:
+      description: Delete a reminder by ID
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Delete a reminder
+      tags:
+      - reminders
+    get:
+      description: Get a specific reminder by its ID
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Reminder'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Get a reminder by ID
+      tags:
+      - reminders
+    put:
+      consumes:
+      - application/json
+      description: Update an existing reminder
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reminder object
+        in: body
+        name: reminder
+        required: true
+        schema:
+          $ref: '#/definitions/models.Reminder'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Reminder'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Update a reminder
+      tags:
+      - reminders
+  /api/reminders/{id}/complete:
+    post:
+      description: Mark a reminder as completed
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Complete a reminder
+      tags:
+      - reminders
+  /api/reminders/{id}/snooze:
+    post:
+      consumes:
+      - application/json
+      description: Snooze a reminder for a specified duration
+      parameters:
+      - description: Reminder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Snooze duration in seconds
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SnoozeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Snooze a reminder
+      tags:
+      - reminders
+  /api/reminders/mine:
+    get:
+      description: Get all reminders for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Reminder'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Get current user reminders
+      tags:
+      - reminders
+  /api/users/{userId}/reminders:
+    get:
+      description: Get all reminders for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Reminder'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Get user reminders
+      tags:
+      - reminders
 schemes:
 - http
 - https

@@ -176,9 +176,56 @@ func main() {
 			return re.String(200, string(content))
 		})
 
+		// Root endpoint - show API info instead of redirecting
 		se.Router.GET("/", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.Redirect(302, "/test")
+			re.Response.Header().Set("Content-Type", "text/plain")
+			return re.String(200, "RemiAq API is running!\n\nAvailable endpoints:\n- /swagger/ - Swagger documentation\n- /test/ - Test pages\n- /api/ - API endpoints")
+		})
+
+		// Swagger UI endpoints - handle both /swagger and /swagger/*
+		se.Router.GET("/swagger", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Redirect to /swagger/ to ensure proper path handling
+			return re.Redirect(302, "/swagger/")
+		})
+
+		se.Router.GET("/swagger/", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Serve swagger.json as default for /swagger/
+			content, err := os.ReadFile("./docs/swagger.json")
+			if err != nil {
+				return re.String(404, "Swagger file not found")
+			}
+			re.Response.Header().Set("Content-Type", "application/json")
+			return re.String(200, string(content))
+		})
+
+		se.Router.GET("/swagger/*", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			
+			// Get the requested file path
+			requestedFile := re.Request.PathValue("*")
+			if requestedFile == "" {
+				requestedFile = "swagger.json"
+			}
+			
+			// Read and serve the file
+			content, err := os.ReadFile("./docs/" + requestedFile)
+			if err != nil {
+				return re.String(404, "File not found: "+requestedFile)
+			}
+			
+			// Set appropriate content type
+			if len(requestedFile) > 5 && requestedFile[len(requestedFile)-5:] == ".json" {
+				re.Response.Header().Set("Content-Type", "application/json")
+			} else if len(requestedFile) > 4 && requestedFile[len(requestedFile)-4:] == ".yaml" {
+				re.Response.Header().Set("Content-Type", "application/yaml")
+			} else {
+				re.Response.Header().Set("Content-Type", "text/html")
+			}
+			
+			return re.String(200, string(content))
 		})
 
 		return se.Next()

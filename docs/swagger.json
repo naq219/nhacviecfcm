@@ -21,7 +21,467 @@
     },
     "host": "localhost:8090",
     "basePath": "/",
-    "paths": {},
+    "paths": {
+        "/api/reminders": {
+            "post": {
+                "description": "Create a new reminder for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Create a new reminder",
+                "parameters": [
+                    {
+                        "description": "Reminder object",
+                        "name": "reminder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Reminder"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Reminder"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/reminders/mine": {
+            "get": {
+                "description": "Get all reminders for the authenticated user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Get current user reminders",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Reminder"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/reminders/{id}": {
+            "get": {
+                "description": "Get a specific reminder by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Get a reminder by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Reminder"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update an existing reminder",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Update a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reminder object",
+                        "name": "reminder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Reminder"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Reminder"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a reminder by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Delete a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/reminders/{id}/complete": {
+            "post": {
+                "description": "Mark a reminder as completed",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Complete a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/reminders/{id}/snooze": {
+            "post": {
+                "description": "Snooze a reminder for a specified duration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Snooze a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Snooze duration in seconds",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SnoozeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/users/{userId}/reminders": {
+            "get": {
+                "description": "Get all reminders for a specific user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reminders"
+                ],
+                "summary": "Get user reminders",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Reminder"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handlers.SnoozeRequest": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "description": "Duration in seconds",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.RecurrencePattern": {
+            "type": "object",
+            "properties": {
+                "base_on": {
+                    "description": "creation, completion",
+                    "type": "string"
+                },
+                "day_of_month": {
+                    "description": "For monthly recurrence",
+                    "type": "integer"
+                },
+                "day_of_week": {
+                    "description": "For weekly recurrence (0=Sunday)",
+                    "type": "integer"
+                },
+                "frequency": {
+                    "description": "minute, hour, day, week, month",
+                    "type": "string"
+                },
+                "interval": {
+                    "description": "For interval-based recurrence",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "daily, weekly, monthly, lunar_last_day_of_month",
+                    "type": "string"
+                }
+            }
+        },
+        "models.Reminder": {
+            "type": "object",
+            "properties": {
+                "calendar_type": {
+                    "description": "solar, lunar",
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_completed_at": {
+                    "type": "string"
+                },
+                "last_sent_at": {
+                    "type": "string"
+                },
+                "max_retries": {
+                    "type": "integer"
+                },
+                "next_trigger_at": {
+                    "type": "string"
+                },
+                "recurrence_pattern": {
+                    "description": "JSON field",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RecurrencePattern"
+                        }
+                    ]
+                },
+                "repeat_strategy": {
+                    "description": "none, retry_until_complete",
+                    "type": "string"
+                },
+                "retry_count": {
+                    "type": "integer"
+                },
+                "retry_interval_sec": {
+                    "type": "integer"
+                },
+                "snooze_until": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "active, completed, paused",
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "trigger_time_of_day": {
+                    "description": "HH:MM format",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "one_time, recurring",
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "utils.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "utils.SuccessResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        }
+    },
     "securityDefinitions": {
         "BasicAuth": {
             "type": "basic"

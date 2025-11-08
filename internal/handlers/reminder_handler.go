@@ -25,6 +25,11 @@ type ReminderServiceInterface interface {
 	ProcessDueReminders(ctx context.Context) error
 }
 
+// SnoozeRequest represents the request body for snoozing a reminder
+type SnoozeRequest struct {
+	Duration int `json:"duration"` // Duration in seconds
+}
+
 // ReminderHandler handles reminder HTTP requests
 type ReminderHandler struct {
 	reminderService ReminderServiceInterface
@@ -38,6 +43,16 @@ func NewReminderHandler(reminderService ReminderServiceInterface) *ReminderHandl
 }
 
 // CreateReminder handles POST /api/reminders
+// @Summary Create a new reminder
+// @Description Create a new reminder for the authenticated user
+// @Tags reminders
+// @Accept json
+// @Produce json
+// @Param reminder body models.Reminder true "Reminder object"
+// @Success 200 {object} models.Reminder
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Router /api/reminders [post]
 func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -62,6 +77,15 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 }
 
 // GetReminder handles GET /api/reminders/:id
+// @Summary Get a reminder by ID
+// @Description Get a specific reminder by its ID
+// @Tags reminders
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Success 200 {object} models.Reminder
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 404 {object} utils.ErrorResponse
+// @Router /api/reminders/{id} [get]
 func (h *ReminderHandler) GetReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -79,6 +103,16 @@ func (h *ReminderHandler) GetReminder(re *core.RequestEvent) error {
 }
 
 // UpdateReminder handles PUT /api/reminders/:id
+// @Summary Update a reminder
+// @Description Update an existing reminder
+// @Tags reminders
+// @Accept json
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Param reminder body models.Reminder true "Reminder object"
+// @Success 200 {object} models.Reminder
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /api/reminders/{id} [put]
 func (h *ReminderHandler) UpdateReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -102,6 +136,14 @@ func (h *ReminderHandler) UpdateReminder(re *core.RequestEvent) error {
 }
 
 // DeleteReminder handles DELETE /api/reminders/:id
+// @Summary Delete a reminder
+// @Description Delete a reminder by ID
+// @Tags reminders
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /api/reminders/{id} [delete]
 func (h *ReminderHandler) DeleteReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -118,6 +160,14 @@ func (h *ReminderHandler) DeleteReminder(re *core.RequestEvent) error {
 }
 
 // GetUserReminders handles GET /api/users/:userId/reminders
+// @Summary Get user reminders
+// @Description Get all reminders for a specific user
+// @Tags reminders
+// @Produce json
+// @Param userId path string true "User ID"
+// @Success 200 {array} models.Reminder
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /api/users/{userId}/reminders [get]
 func (h *ReminderHandler) GetUserReminders(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -135,6 +185,14 @@ func (h *ReminderHandler) GetUserReminders(re *core.RequestEvent) error {
 }
 
 // GetCurrentUserReminders handles GET /api/reminders/mine
+// @Summary Get current user reminders
+// @Description Get all reminders for the authenticated user
+// @Tags reminders
+// @Produce json
+// @Success 200 {array} models.Reminder
+// @Failure 400 {object} utils.ErrorResponse
+// @Failure 401 {object} utils.ErrorResponse
+// @Router /api/reminders/mine [get]
 func (h *ReminderHandler) GetCurrentUserReminders(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -152,6 +210,16 @@ func (h *ReminderHandler) GetCurrentUserReminders(re *core.RequestEvent) error {
 }
 
 // SnoozeReminder handles POST /api/reminders/:id/snooze
+// @Summary Snooze a reminder
+// @Description Snooze a reminder for a specified duration
+// @Tags reminders
+// @Accept json
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Param request body SnoozeRequest true "Snooze duration in seconds"
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /api/reminders/{id}/snooze [post]
 func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
@@ -177,6 +245,14 @@ func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
 }
 
 // CompleteReminder handles POST /api/reminders/:id/complete
+// @Summary Complete a reminder
+// @Description Mark a reminder as completed
+// @Tags reminders
+// @Produce json
+// @Param id path string true "Reminder ID"
+// @Success 200 {object} utils.SuccessResponse
+// @Failure 400 {object} utils.ErrorResponse
+// @Router /api/reminders/{id}/complete [post]
 func (h *ReminderHandler) CompleteReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 
