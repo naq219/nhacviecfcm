@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -47,6 +49,13 @@ import (
 
 func main() {
 	// Load configuration
+	if err := godotenv.Load(); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Warning: error loading .env: %v", err)
+		} else {
+			log.Println("No .env file found, using system environment")
+		}
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
