@@ -351,6 +351,7 @@ This comprehensive rule set ensures consistency, maintainability, and quality ac
 các table có created và updated không cần phải insert, pocketbase tự động insert cho rồi
 chạy lệnh không dùng && để tránh lỗi, ví dụ cd d:\PROJECT\nhacviecfcm && go run test_parse.go sẽ lỗi trên windows
 
+không cần chạy lệnh cd đến thư mục chính của nhacviecfcm project nữa vì cmd luôn ở đó 
 để run project : go run ./cmd/server serve
 
 #api để query db khi cần test: GET /api/rquery?query= {sql}
