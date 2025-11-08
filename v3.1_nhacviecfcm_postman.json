@@ -1,0 +1,502 @@
+{
+	"info": {
+		"_postman_id": "remiaq-v3-complete",
+		"name": "RemiAq API v3 (WORKER V2 - FRP+CRP+IntervalSeconds)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "36689404"
+	},
+	"item": [
+		{
+			"name": "AUTH",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"123123123\",\n  \"passwordConfirm\": \"123123123\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/collections/musers/records",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "collections", "musers", "records"]
+						}
+					}
+				},
+				{
+					"name": "Login User",
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"var jsonData = pm.response.json();",
+								"if (jsonData && jsonData.token) {",
+								"    pm.environment.set(\"auth_token\", jsonData.token);",
+								"    pm.environment.set(\"user_id\", jsonData.record.id);",
+								"    console.log(\"✓ Token: \" + jsonData.token.substring(0,20) + \"...\");",
+								"    console.log(\"✓ User ID: \" + jsonData.record.id);",
+								"}"
+							],
+							"type": "text/javascript"
+						}
+					}],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identity\": \"test@example.com\",\n  \"password\": \"123123123\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/collections/musers/auth-with-password",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "collections", "musers", "auth-with-password"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "REMINDERS - GET",
+			"item": [
+				{
+					"name": "Get My Reminders",
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/mine",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "mine"]
+						}
+					}
+				},
+				{
+					"name": "Get Reminder by ID",
+					"request": {
+						"method": "GET",
+						"header": [{"key": "Authorization", "value": "Bearer {{auth_token}}"}],
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/{{reminder_id}}",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "{{reminder_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "REMINDERS - CREATE",
+			"item": [
+				{
+					"name": "1. One-Time - Send Now (immediately)",
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": ["var jsonData = pm.response.json(); if (jsonData && jsonData.data && jsonData.data.id) { pm.environment.set(\"reminder_id\", jsonData.data.id); console.log(\"✓ ID: \" + jsonData.data.id); }"],
+							"type": "text/javascript"
+						}
+					}],
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"One-Time Now\",\n  \"description\": \"Send immediately\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"max_crp\": 0,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "2. One-Time - Send at 4 PM today (next_recurring set)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nhắc 4h chiều\",\n  \"description\": \"Gửi lúc 4PM hôm nay\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"next_recurring\": \"2025-11-08T16:00:00Z\",\n  \"max_crp\": 0,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "3. One-Time - With CRP Retry (5 times, 10sec)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"One-Time with Retries\",\n  \"description\": \"Retry 5x every 10sec if fail\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"max_crp\": 5,\n  \"crp_interval_sec\": 10,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "4. Recurring - Daily at 8 AM",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Uống thuốc hàng ngày\",\n  \"description\": \"Mỗi ngày lúc 8 sáng\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"recurrence_pattern\": {\n    \"type\": \"daily\",\n    \"interval\": 1,\n    \"trigger_time_of_day\": \"08:00\"\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "5. Recurring - Daily + CRP Retry (3x, 5min)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nhắc hàng ngày có retry\",\n  \"description\": \"8AM mỗi ngày, retry 3x mỗi 5 phút\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"recurrence_pattern\": {\n    \"type\": \"daily\",\n    \"interval\": 1,\n    \"trigger_time_of_day\": \"08:00\"\n  },\n  \"max_crp\": 3,\n  \"crp_interval_sec\": 300,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "6. Recurring - Weekly (Monday 9 AM)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Weekly Report\",\n  \"description\": \"Mỗi thứ 2 lúc 9 sáng\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"recurrence_pattern\": {\n    \"type\": \"weekly\",\n    \"interval\": 1,\n    \"day_of_week\": 1,\n    \"trigger_time_of_day\": \"09:00\"\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "7. Recurring - Monthly (5th of month)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Pay Bills\",\n  \"description\": \"Mỗi tháng ngày 5 lúc 10 sáng\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"recurrence_pattern\": {\n    \"type\": \"monthly\",\n    \"interval\": 1,\n    \"day_of_month\": 5,\n    \"trigger_time_of_day\": \"10:00\"\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "8. Recurring - Interval 3 minutes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nhắc mỗi 3 phút\",\n  \"description\": \"Lặp lại mỗi 3 phút từ lúc tạo\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"next_recurring\": \"2025-11-08T13:00:00Z\",\n  \"recurrence_pattern\": {\n    \"type\": \"interval_seconds\",\n    \"interval_seconds\": 180\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "9. Recurring - Interval 1 hour + retry",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nhắc mỗi giờ\",\n  \"description\": \"Lặp mỗi 1 giờ, retry 3x mỗi 5 phút\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"next_recurring\": \"2025-11-08T14:00:00Z\",\n  \"recurrence_pattern\": {\n    \"type\": \"interval_seconds\",\n    \"interval_seconds\": 3600\n  },\n  \"max_crp\": 3,\n  \"crp_interval_sec\": 300,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "10. Recurring - Interval 20 days",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nhắc mỗi 20 ngày\",\n  \"description\": \"Lặp mỗi 20 ngày từ 8/11\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"none\",\n  \"next_recurring\": \"2025-11-08T08:00:00Z\",\n  \"recurrence_pattern\": {\n    \"type\": \"interval_seconds\",\n    \"interval_seconds\": 1728000\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "11. Recurring - crp_until_complete",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Report Due - Until Complete\",\n  \"description\": \"Nhắc hàng tuần cho đến khi hoàn thành\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"repeat_strategy\": \"crp_until_complete\",\n  \"recurrence_pattern\": {\n    \"type\": \"weekly\",\n    \"interval\": 1,\n    \"day_of_week\": 1,\n    \"trigger_time_of_day\": \"09:00\"\n  },\n  \"max_crp\": 5,\n  \"crp_interval_sec\": 3600,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				},
+				{
+					"name": "12. Recurring - Lunar Last Day",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Cuối tháng Âm lịch\",\n  \"description\": \"Nhắc vào ngày cuối tháng Âm\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"lunar\",\n  \"repeat_strategy\": \"none\",\n  \"recurrence_pattern\": {\n    \"type\": \"lunar_last_day_of_month\",\n    \"trigger_time_of_day\": \"18:00\"\n  },\n  \"max_crp\": 1,\n  \"crp_interval_sec\": 0,\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "REMINDERS - ACTIONS",
+			"item": [
+				{
+					"name": "Update Reminder",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\",\n  \"max_crp\": 2\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/{{reminder_id}}",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "{{reminder_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Snooze Reminder (5 min)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"duration\": 300\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/{{reminder_id}}/snooze",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "{{reminder_id}}", "snooze"]
+						}
+					}
+				},
+				{
+					"name": "Complete Reminder",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/{{reminder_id}}/complete",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "{{reminder_id}}", "complete"]
+						}
+					}
+				},
+				{
+					"name": "Delete Reminder",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{"key": "Authorization", "value": "Bearer {{auth_token}}"}
+						],
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/reminders/{{reminder_id}}",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "reminders", "{{reminder_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "SYSTEM",
+			"item": [
+				{
+					"name": "Get System Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/system_status",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "system_status"]
+						}
+					}
+				},
+				{
+					"name": "Enable Worker",
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"worker_enabled\": true,\n  \"last_error\": \"\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/system_status",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "system_status"]
+						}
+					}
+				},
+				{
+					"name": "Disable Worker",
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"worker_enabled\": false,\n  \"last_error\": \"Manually disabled for testing\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8090/api/system_status",
+							"protocol": "http",
+							"host": ["127", "0", "0", "1"],
+							"port": "8090",
+							"path": ["api", "system_status"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{"key": "auth_token", "value": "", "type": "string"},
+		{"key": "user_id", "value": "", "type": "string"},
+		{"key": "reminder_id", "value": "", "type": "string"}
+	]
+}

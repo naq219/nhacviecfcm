@@ -1,89 +1,147 @@
-# 🔔 remiaq - Reminder Application
+# RemiAq - Essential Documentation
 
-Hệ thống nhắc nhở thông minh với hỗ trợ lịch dương/âm, nhắc lại tự động, và Firebase Cloud Messaging, được xây dựng trên nền tảng PocketBase.
+---
 
-## ✨ Tính năng
+## 📌 1. README.md
 
-- ✅ **Nhắc một lần / Định kỳ**: Hỗ trợ nhắc một lần hoặc lặp lại theo lịch (hàng ngày, tuần, tháng, năm).
-- ✅ **Lịch Dương/Âm**: Hỗ trợ đầy đủ cả hai loại lịch, bao gồm cả ngày cuối cùng của tháng Âm lịch.
-- ✅ **Nhắc lại tự động**: Tự động nhắc lại một công việc nếu người dùng chưa đánh dấu hoàn thành.
-- ✅ **Snooze**: Cho phép người dùng hoãn một nhắc nhở.
-- ✅ **FCM Push Notification**: Gửi thông báo đẩy (push notification) qua Firebase Cloud Messaging.
-- ✅ **Worker xử lý nền**: Một worker chạy nền để xử lý các nhắc nhở đến hạn và gửi thông báo.
-- ✅ **API truy vấn SQL**: Cung cấp các endpoint để thực thi các câu lệnh SQL thô (kế thừa từ code cũ).
-- ✅ **Repository Pattern**: Kiến trúc linh hoạt, dễ dàng thay đổi hoặc mở rộng cơ sở dữ liệu trong tương lai.
+```markdown
+# RemiAq - Smart Reminder & Lunar Calendar System
 
-## 🏗️ Kiến trúc
+## 🎯 Overview
 
-Dự án tuân theo mô hình Repository Pattern với các lớp được phân tách rõ ràng:
+RemiAq là ứng dụng nhắc nhở thông minh với:
+- ✅ **Firebase Cloud Messaging (FCM)** - Push notifications
+- ✅ **Lịch Dương & Âm** - Support Solar & Lunar calendar
+- ✅ **FRP+CRP Logic** - Smart retry system
+- ✅ **Snooze** - Hoãn nhắc nhở
+- ✅ **Interval-based** - Nhắc theo thời gian cố định (3 phút, 1 giờ, 20 ngày...)
+
+## 🏗️ Architecture
+
 ```
-/internal
-├── handlers/       # (HTTP) Tiếp nhận và xử lý request
-├── services/       # (Business Logic) Chứa logic nghiệp vụ
-├── repository/     # (Data Access) Truy cập dữ liệu
-└── models/         # (Data Structures) Định nghĩa cấu trúc dữ liệu
+┌─────────────┐
+│   Mobile    │
+│   Client    │
+└──────┬──────┘
+       │
+       ├─ POST /api/reminders (Create)
+       ├─ GET /api/reminders/mine (List)
+       ├─ PUT /api/reminders/{id} (Update)
+       ├─ POST /api/reminders/{id}/complete (Complete)
+       ├─ POST /api/reminders/{id}/snooze (Snooze)
+       │
+       ▼
+┌──────────────────┐     ┌──────────────┐
+│  Backend API     │────▶│  PocketBase  │
+│  (Go)            │     │  (Database)  │
+└──────┬───────────┘     └──────────────┘
+       │
+       │ (Every 60s)
+       ▼
+┌──────────────────┐
+│  Worker Process  │ ◀── Check next_action_at
+│  (FCM Sender)    │     Send notifications
+└──────────────────┘     Update DB
 ```
 
-## 📦 Cài đặt
+## 🚀 Quick Start
 
-### 1. Yêu cầu
-- Go 1.21+
-- PocketBase
-
-### 2. Clone repo
 ```bash
-git clone <repo-url>
+# Clone
+git clone <repo>
 cd remiaq
+
+# Run
+go run ./cmd/server serve
+
+# Server at http://localhost:8090
 ```
 
-### 3. Cài đặt dependencies
+## 📚 Documentation
+
+- [API_DOCUMENTATION.md](./docs/API_DOCUMENTATION.md) - For Mobile Dev
+- [WORKER_LOGIC.md](./docs/WORKER_LOGIC.md) - For Backend Dev
+- [DATABASE_SCHEMA.md](./docs/DATABASE_SCHEMA.md) - DB Overview
+- [Postman Collection](./v3_nhacviecfcm_postman.json) - API Testing
+
+## 📦 Tech Stack
+
+| Component | Tech |
+|-----------|------|
+| Backend | Go 1.21+ |
+| Database | PocketBase (SQLite) |
+| Auth | PocketBase Auth |
+| Notifications | Firebase Cloud Messaging |
+| Calendar | Custom Lunar Calendar Lib |
+
+## 🔧 Environment Setup
+
 ```bash
-go mod download
+# .env
+POCKETBASE_ADDR=127.0.0.1:8090
+FCM_CREDENTIALS=firebase-credentials.json
+WORKER_INTERVAL=60
 ```
 
-### 4. Cấu hình
-Tạo file `.env` từ `.env.example` và điền các thông tin cần thiết, đặc biệt là đường dẫn tới file credentials của Firebase.
+## 📝 API Quick Example
 
-### 5. Chạy server
 ```bash
-go run ./cmd/server/main.go
+# Login
+curl -X POST http://localhost:8090/api/collections/musers/auth-with-password \
+  -H "Content-Type: application/json" \
+  -d '{"identity":"test@example.com","password":"123123123"}'
+
+# Create reminder (daily at 8 AM)
+curl -X POST http://localhost:8090/api/reminders \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"Uống thuốc",
+    "type":"recurring",
+    "recurrence_pattern":{"type":"daily","trigger_time_of_day":"08:00"},
+    "max_crp":1,
+    "crp_interval_sec":0,
+    "status":"active"
+  }'
 ```
-Server sẽ chạy tại địa chỉ `http://127.0.0.1:8090` (mặc định của PocketBase).
 
-## 🔌 API Endpoints
+## 🎯 Key Concepts
 
-### Reminder
-- `POST   /api/reminders`: Tạo một nhắc nhở mới.
-- `GET    /api/reminders/:id`: Lấy thông tin một nhắc nhở.
-- `PUT    /api/reminders/:id`: Cập nhật một nhắc nhở.
-- `DELETE /api/reminders/:id`: Xóa một nhắc nhở.
-- `GET    /api/users/:userId/reminders`: Lấy danh sách nhắc nhở của một người dùng.
-- `POST   /api/reminders/:id/snooze`: Hoãn một nhắc nhở.
-- `POST   /api/reminders/:id/complete`: Đánh dấu hoàn thành một nhắc nhở.
+### FRP (Father Recurrence Pattern)
+Lặp lại theo **lịch** (calendar-based):
+- Daily (mỗi ngày)
+- Weekly (mỗi tuần)
+- Monthly (mỗi tháng)
+- Lunar last day (cuối tháng Âm)
+- Interval seconds (mỗi X giây/phút/giờ/ngày)
 
-### System Status
-- `GET    /api/system_status`: Lấy trạng thái hiện tại của hệ thống (ví dụ: worker có đang chạy không).
-- `PUT    /api/system_status`: Cập nhật trạng thái hệ thống (bật/tắt worker, ghi nhận lỗi).
+### CRP (Child Repeat Pattern)
+**Retry** nếu gửi thất bại:
+- max_crp: Số lần retry tối đa
+- crp_interval_sec: Khoảng cách giữa các retry
 
-### Raw SQL Queries (Legacy)
-- `GET/POST   /api/rquery`: Thực thi câu lệnh `SELECT`.
-- `GET/POST   /api/rinsert`: Thực thi câu lệnh `INSERT`.
-- `GET/PUT    /api/rupdate`: Thực thi câu lệnh `UPDATE`.
-- `GET/DELETE /api/rdelete`: Thực thi câu lệnh `DELETE`.
+Ví dụ:
+- max_crp=3, crp_interval_sec=300 → Gửi 3 lần, mỗi 5 phút
 
-## 🚀 Roadmap
+---
 
-- [x] **Hỗ trợ Lịch âm**: Đã hoàn thành.
-- [x] **Worker xử lý nền**: Đã hoàn thành.
-- [ ] **Unit Tests**: Bổ sung và tăng độ bao phủ của test.
-- [ ] **Authentication & Authorization**: Hoàn thiện cơ chế xác thực và phân quyền.
-- [ ] **API Documentation (Swagger)**: Tích hợp Swagger để tự động tạo tài liệu API.
-- [ ] **Mở rộng Repository**: Thêm implementation cho các hệ quản trị CSDL khác (ví dụ: MySQL, PostgreSQL).
+## 2. API_DOCUMENTATION.md
 
-## 📄 License
 
-MIT
+## 3. DATABASE_SCHEMA.md
 
-## 👥 Contributors
 
-Quảng An
+## 4. WORKER_LOGIC.md
+
+
+
+---
+
+**Đây là 4 tài liệu CORE!** 📚
+
+Các bạn có thể:
+1. Copy markdown vào từng file docs/
+2. Cập nhật thông tin (URLs, port, etc)
+3. Thêm screenshots nếu cần
+
+**Tài liệu phụ có thể viết sau** (DEPLOYMENT, ARCHITECTURE, etc)

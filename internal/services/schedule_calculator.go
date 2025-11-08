@@ -74,7 +74,6 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 	if reminder.RecurrencePattern == nil {
 		return time.Time{}, errors.New("recurrence_pattern required for recurring reminder")
 	}
-
 	pattern := reminder.RecurrencePattern
 	current := reminder.NextRecurring
 
@@ -82,25 +81,42 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 		current = now
 	}
 
+	// ⭐ NEW: Handle interval_seconds
+	if pattern.Type == models.RecurrenceTypeIntervalSeconds {
+		return c.calculateNextIntervalSeconds(current, pattern, now)
+	}
+
+	// Existing logic (daily, weekly, monthly, lunar)
 	switch pattern.Type {
 	case models.RecurrenceTypeDaily:
 		return c.calculateNextDaily(current, pattern, now)
-
 	case models.RecurrenceTypeWeekly:
 		return c.calculateNextWeekly(current, pattern, now)
-
 	case models.RecurrenceTypeMonthly:
 		if reminder.CalendarType == models.CalendarTypeLunar {
 			return c.calculateNextLunarMonthly(current, pattern, now)
 		}
 		return c.calculateNextSolarMonthly(current, pattern, now)
-
 	case models.RecurrenceTypeLunarLastDayOfMonth:
 		return c.calculateNextLunarLastDay(current, pattern, now)
-
 	default:
 		return time.Time{}, errors.New("unsupported recurrence type")
 	}
+}
+
+func (c *ScheduleCalculator) calculateNextIntervalSeconds(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	if pattern.IntervalSeconds <= 0 {
+		return time.Time{}, errors.New("interval_seconds must be > 0")
+	}
+	interval := time.Duration(pattern.IntervalSeconds) * time.Second
+	next := current
+
+	// Find first occurrence after now
+	for next.Before(now) || next.Equal(now) {
+		next = next.Add(interval)
+	}
+
+	return next, nil
 }
 
 // calculateNextDaily: Add interval days, find first > now

@@ -51,6 +51,8 @@ type RecurrencePattern struct {
 	DayOfWeek        int    `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
 	CalendarType     string `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
 	TriggerTimeOfDay string `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
+	IntervalSeconds  int    `json:"interval_seconds,omitempty"`    // ⭐ ADD THIS FIELD
+
 }
 
 // User represents a user with FCM token
@@ -103,6 +105,8 @@ const (
 	RecurrenceTypeWeekly              = "weekly"
 	RecurrenceTypeMonthly             = "monthly"
 	RecurrenceTypeLunarLastDayOfMonth = "lunar_last_day_of_month"
+	RecurrenceTypeIntervalSeconds     = "interval_seconds" // ⭐ ADD THIS
+
 )
 
 // Validate checks if reminder data is valid

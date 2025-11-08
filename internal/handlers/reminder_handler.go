@@ -241,7 +241,13 @@ func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
 		return utils.SendError(re, 400, "Failed to snooze reminder", err)
 	}
 
-	return utils.SendSuccess(re, "Reminder snoozed successfully", nil)
+	// Get the updated reminder to return
+	reminder, err := h.reminderService.GetReminder(re.Request.Context(), id)
+	if err != nil {
+		return utils.SendError(re, 400, "Failed to get updated reminder", err)
+	}
+
+	return utils.SendSuccess(re, "Reminder snoozed successfully", reminder)
 }
 
 // CompleteReminder handles POST /api/reminders/:id/complete

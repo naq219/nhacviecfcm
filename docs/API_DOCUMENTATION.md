@@ -1,312 +1,237 @@
+
+```markdown
 # RemiAq API Documentation
 
-## 1. Introduction
+## Authentication
 
-This document provides a detailed description of the RemiAq API. It is intended for client-side developers and AI assistants who need to interact with the RemiAq backend.
-
-The API provides functionalities for managing reminders, checking system status, and executing raw SQL queries for administrative purposes.
-
-**Base URL**: `http://localhost:8090`
-
-## 2. Authentication
-
-Most endpoints are protected and require authentication. The API uses PocketBase's built-in token-based authentication.
-
-To authenticate, you need to obtain a token from the PocketBase authentication endpoint (e.g., `/api/collections/musers/auth-with-password`) and include it in the `Authorization` header for subsequent requests.
-
-**Header Format**:
+### Register
 ```
-Authorization: Bearer YOUR_AUTH_TOKEN
+POST /api/collections/musers/records
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "passwordConfirm": "password123"
+}
+
+Response:
+{
+  "id": "user_id_123",
+  "email": "user@example.com",
+  ...
+}
 ```
 
-Endpoints that require authentication are marked with `(Secure)`.
-
-## 3. Endpoints
-
-### 3.1. Health Check
-
-- **Endpoint**: `GET /hello`
-- **Description**: A simple endpoint to check if the API server is running.
-- **Authentication**: None
-- **Success Response**:
-  - **Code**: `200 OK`
-  - **Content-Type**: `text/plain`
+### Login
 ```
-  - **Body**:
-    ```text
-    RemiAq API is running!
-    ```
-```
-### 3.2. System Status
+POST /api/collections/musers/auth-with-password
+Content-Type: application/json
 
-- **Endpoint**: `GET /api/system_status`
-- **Description**: Retrieves the current status of the system, including worker status and last error.
-- **Authentication**: None
-- **Success Response**:
-  - **Code**: `200 OK`
-  - **Content-Type**: `application/json`
-  - **Body**: A `SystemStatus` object.
-    ```json
+{
+  "identity": "user@example.com",
+  "password": "password123"
+}
+
+Response:
+{
+  "token": "JWT_TOKEN",
+  "record": {
+    "id": "user_id_123",
+    "email": "user@example.com"
+  }
+}
+```
+
+## Reminders API
+
+### Create Reminder
+
+```
+POST /api/reminders
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "title": "string",                    ✓ Required
+  "description": "string",              ✓ Optional
+  "type": "one_time|recurring",         ✓ Required
+  "calendar_type": "solar|lunar",       ✓ Required (default: solar)
+  "status": "active|completed|paused",  ✓ Required (default: active)
+  
+  "next_recurring": "2025-11-08T16:00:00Z",  ✓ Optional (set when to start)
+  
+  "recurrence_pattern": {               ✓ For recurring only
+    "type": "daily|weekly|monthly|lunar_last_day_of_month|interval_seconds",
+    "interval": 1,
+    "day_of_month": 5,
+    "day_of_week": 1,
+    "trigger_time_of_day": "08:00",
+    "interval_seconds": 3600
+  },
+  
+  "repeat_strategy": "none|crp_until_complete",  ✓ (default: none)
+  
+  "max_crp": 3,                         ✓ Optional (0=1 time only)
+  "crp_interval_sec": 300               ✓ Optional (retry interval)
+}
+
+Response:
+{
+  "success": true,
+  "message": "Reminder created successfully",
+  "data": {
+    "id": "reminder_id_123",
+    "next_recurring": "2025-11-08T16:00:00Z",
+    "next_crp": "2025-11-08T16:00:00Z",
+    "next_action_at": "2025-11-08T16:00:00Z",
+    ...
+  }
+}
+```
+
+### Get My Reminders
+
+```
+GET /api/reminders/mine
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "message": "",
+  "data": [
     {
-        "success":  true,
-        "data":  {
-                     "mid":  1,
-                     "worker_enabled":  false,
-                     "last_error":  "",
-                     "updated":  "2025-11-04T15:55:20.079Z"
-                 }
+      "id": "reminder_1",
+      "title": "...",
+      ...
     }
-    ```
+  ]
+}
+```
+
+### Update Reminder
+
+```
+PUT /api/reminders/{id}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "title": "New Title",
+  "max_crp": 5
+}
+```
+
+### Complete Reminder
+
+```
+POST /api/reminders/{id}/complete
+Authorization: Bearer {token}
+
+Effect:
+- one_time: Mark as completed
+- recurring + none: Reset CRP, FRP continues
+- recurring + crp_until_complete: Reset CRP + recalc next_recurring
+```
+
+### Snooze Reminder
+
+```
+POST /api/reminders/{id}/snooze
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "duration": 300  // seconds (5 minutes)
+}
+```
+
+### Delete Reminder
+
+```
+DELETE /api/reminders/{id}
+Authorization: Bearer {token}
+```
 
 ---
 
-- **Endpoint**: `PUT /api/system_status`
-- **Description**: Updates the system status. This is typically used for enabling/disabling the background worker or clearing errors.
-- **Authentication**: Recommended to be admin-only.
-- **Request Body**:
-  ```json
-  {
-    "worker_enabled": true,
-    "last_error": "Optional error message"
-  }
-  ```
-- **Success Response**:
-  - **Code**: `200 OK`
-  - **Content-Type**: `application/json`
-  - **Body**: The updated `SystemStatus` object.
-    ```json
-    {
-        "success":  true,
-        "message":  "System status updated",
-        "data":  {
-                     "mid":  1,
-                     "worker_enabled":  true,
-                     "last_error":  "",
-                     "updated":  "2025-11-05T08:21:36.1001069Z"
-                 }
-    }
-    ```
+## Field Definitions
 
-### 3.3. Raw SQL Queries (Admin Only)
+### next_recurring
+**Thời điểm FRP tiếp theo sẽ trigger**
+- Set bởi user khi create
+- Auto update khi FRP trigger
+- Mỗi ngày 08:00 → next_recurring = 08:00 ngày hôm sau
 
-These endpoints are for administrative purposes and should be protected with strict access control. They allow executing raw SQL queries against the database.
+### next_crp
+**Thời điểm CRP tiếp theo sẽ retry**
+- = next_recurring khi FRP trigger
+- Auto update sau mỗi CRP: next_crp = last_sent_at + crp_interval_sec
 
-**Request Body Format** (for POST/PUT):
-```json
-{
-  "query": "SELECT * FROM table_name;"
-}
-```
-**Request Query Parameter** (for GET/DELETE): `?q=SELECT...`
+### next_action_at
+**Thời điểm gần nhất cần check reminder này**
+- = MIN(snooze_until, next_recurring, next_crp)
+- Worker query: WHERE next_action_at <= NOW
 
-- **Endpoint**: `POST /api/rquery` (or `GET`)
-  - **Action**: Executes a `SELECT` query.
-- **Endpoint**: `POST /api/rinsert` (or `GET`)
-  - **Action**: Executes an `INSERT` query.
-- **Endpoint**: `PUT /api/rupdate` (or `GET`)
-  - **Action**: Executes an `UPDATE` query.
-- **Endpoint**: `DELETE /api/rdelete` (or `GET`)
-  - **Action**: Executes a `DELETE` query.
+### Recurrence Patterns
 
-### 3.4. Reminders (Secure)
-
-All reminder endpoints require authentication.
-
-- **Endpoint**: `POST /api/reminders`
-  - **Action**: Creates a new reminder.
-  - **Request Body**: A `Reminder` object.
-  - **Response**: The created `Reminder` object.
-
-- **Endpoint**: `GET /api/reminders/{id}`
-  - **Action**: Retrieves a specific reminder by its ID.
-  - **Response**: A `Reminder` object.
-
-- **Endpoint**: `PUT /api/reminders/{id}`
-  - **Action**: Updates a reminder (supports partial updates).
-  - **Request Body**: A `Reminder` object with fields to update.
-  - **Response**: The updated `Reminder` object.
-
-- **Endpoint**: `DELETE /api/reminders/{id}`
-  - **Action**: Deletes a reminder.
-  - **Response**: A success message.
-
-- **Endpoint**: `GET /api/reminders/mine`
-  - **Action**: Retrieves all reminders for the currently authenticated user.
-  - **Response**: A list of `Reminder` objects.
-  - **Note**: This is the primary endpoint for mobile apps to get user's reminders.
-
-- **Endpoint**: `GET /api/users/{userId}/reminders`
-  - **Action**: Retrieves all reminders for a specific user (admin functionality).
-  - **Response**: A list of `Reminder` objects.
-
-- **Endpoint**: `POST /api/reminders/{id}/snooze`
-  - **Action**: Snoozes a reminder for a specified duration.
-  - **Request Body**:
-    ```json
-    {
-      "duration": 3600 // in seconds
-    }
-    ```
-  - **Response**: A success message.
-
-- **Endpoint**: `POST /api/reminders/{id}/complete`
-  - **Action**: Marks a reminder as complete.
-  - **Response**: A success message.
-
-
-
-
-## 4. Data Models
-
-### Reminder
-```json
-{
-  "id": "string (record_id)",
-  "user_id": "string (user_record_id)",
-  "title": "string",
-  "description": "string",
-  "type": "string (one_time, recurring)",
-  "calendar_type": "string (solar, lunar)",
-  "next_trigger_at": "string (ISO 8601 format)",
-  "trigger_time_of_day": "string (HH:MM format)",
-  "recurrence_pattern": {
-    "type": "string (daily, weekly, monthly, lunar_last_day_of_month, interval_based)",
-    "frequency": "string (minute, hour, day, week, month)",
-    "interval": 1,
-    "day_of_week": 1,
-    "day_of_month": 1,
-    "base_on": "string (creation, completion)"
-  },
-  "repeat_strategy": "string (none, retry_until_complete)",
-  "retry_interval_sec": 300,
-  "max_retries": 3,
-  "retry_count": 0,
-  "status": "string (active, completed, paused)",
-  "snooze_until": "string (ISO 8601 format)",
-  "last_completed_at": "string (ISO 8601 format)",
-  "last_sent_at": "string (ISO 8601 format)",
-  "created": "string (ISO 8601 format)",
-  "updated": "string (ISO 8601 format)"
-}```
-
-### Phân biệt giữa Recurrence Pattern và Repeat Strategy
-
-**Recurrence Pattern** (`recurrence_pattern`):
-- **Mục đích**: Định nghĩa cách một reminder lặp lại theo lịch trình cố định
-- **Áp dụng cho**: Reminders có `type: "recurring"`
-- **Ví dụ**: Lặp lại hàng ngày, hàng tuần, hàng tháng, theo lịch âm
-- **Các trường quan trọng**: `type`, `frequency`, `interval`, `day_of_week`, `day_of_month`, `base_on`
-
-**Repeat Strategy** (`repeat_strategy`):
-- **Mục đích**: Định nghĩa cách hệ thống xử lý khi reminder chưa được hoàn thành
-- **Áp dụng cho**: Cả reminders `one_time` và `recurring`
-- **Ví dụ**: Nhắc lại sau mỗi 5 phút nếu chưa hoàn thành, tối đa 3 lần
-- **Các trường quan trọng**: `repeat_strategy`, `retry_interval_sec`, `max_retries`, `retry_count`
-
-**Tóm tắt**:
-- `recurrence_pattern` = Lịch trình lặp lại cố định (theo calendar)
-- `repeat_strategy` = Cơ chế nhắc lại khi chưa hoàn thành (retry mechanism)
-
-### SystemStatus
-```json
-{
-  "id": "string (always '1')",
-  "worker_enabled": true,
-  "last_run_time": "string (ISO 8601 format)",
-  "last_error": "string",
-  "created": "string (ISO 8601 format)",
-  "updated": "string (ISO 8601 format)"
-}
-```
-
-## 5. Recurrence Pattern Types
-
-The recurrence pattern supports multiple types of recurring reminders:
-
-### 1. INTERVAL-BASED
-- **type**: `"interval_based"`
-- **frequency**: `"minute"`, `"hour"`, `"day"`, `"week"`, `"month"`
-- **interval**: Number (e.g., 1, 2, 3)
-- **Example**: Repeat every 2 hours
-```json
-{
-  "type": "interval_based",
-  "frequency": "hour",
-  "interval": 2
-}
-```
-
-### 2. DAILY
-- **type**: `"daily"`
-- **frequency**: `"day"`
-- **interval**: 1
-- **Example**: Repeat daily
+#### Daily
 ```json
 {
   "type": "daily",
-  "frequency": "day",
-  "interval": 1
+  "interval": 1,              // Every 1, 2, 3... days
+  "trigger_time_of_day": "08:00"  // UTC time HH:MM
 }
 ```
 
-### 3. WEEKLY
-- **type**: `"weekly"`
-- **frequency**: `"week"`
-- **interval**: 1
-- **day_of_week**: `"mon"`, `"tue"`, `"wed"`, `"thu"`, `"fri"`, `"sat"`, `"sun"`
-- **Example**: Repeat every Monday
+#### Weekly
 ```json
 {
   "type": "weekly",
-  "frequency": "week",
   "interval": 1,
-  "day_of_week": "mon"
+  "day_of_week": 1,           // 0=Sun, 1=Mon, ... 6=Sat
+  "trigger_time_of_day": "09:00"
 }
 ```
 
-### 4. MONTHLY
-- **type**: `"monthly"`
-- **frequency**: `"month"`
-- **interval**: 1
-- **day_of_month**: Number (1-31)
-- **base_on**: `"solar"` or `"lunar"`
-- **Example**: Repeat on the 15th of every month (solar calendar)
+#### Monthly (Solar)
 ```json
 {
   "type": "monthly",
-  "frequency": "month",
   "interval": 1,
-  "day_of_month": 15,
-  "base_on": "solar"
+  "day_of_month": 5,
+  "trigger_time_of_day": "10:00"
 }
 ```
 
-### 5. LUNAR LAST DAY
-- **type**: `"lunar_last_day_of_month"`
-- **frequency**: `"month"`
-- **interval**: 1
-- **base_on**: `"lunar"`
-- **Example**: Repeat on the last day of lunar month
+#### Interval Seconds (NEW!)
+```json
+{
+  "type": "interval_seconds",
+  "interval_seconds": 180     // 3 minutes = 180 seconds
+}
+```
+
+Chuyển đổi:
+- 3 phút = 180
+- 1 giờ = 3600
+- 1 ngày = 86400
+- 20 ngày = 1728000
+
+#### Lunar Last Day
 ```json
 {
   "type": "lunar_last_day_of_month",
-  "frequency": "month",
-  "interval": 1,
-  "base_on": "lunar"
+  "trigger_time_of_day": "18:00"
 }
 ```
 
-## 6. Error Responses
+### Repeat Strategies
 
-When an API call fails, the server responds with a standard JSON error format.
+| Strategy | Meaning |
+|----------|---------|
+| `none` | Auto-repeat theo lịch, không cần user complete |
+| `crp_until_complete` | Chờ user complete → recalc next_recurring |
 
-- **Code**: `4xx` or `5xx`
-- **Content-Type**: `application/json`
-- **Body**:
-  ```json
-  {
-    "status": "error",
-    "message": "A descriptive error message",
-    "error": "Detailed error information (optional, often omitted in production)"
-  }
-  ```
+---

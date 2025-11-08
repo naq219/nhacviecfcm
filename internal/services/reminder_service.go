@@ -37,7 +37,6 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 	if err := reminder.Validate(); err != nil {
 		return err
 	}
-
 	reminder.ID = ""
 
 	// Set defaults
@@ -50,12 +49,6 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 	if reminder.CalendarType == "" {
 		reminder.CalendarType = models.CalendarTypeSolar
 	}
-	if reminder.MaxCRP == 0 {
-		reminder.MaxCRP = 0 // Default: send once
-	}
-	if reminder.CRPIntervalSec == 0 {
-		reminder.CRPIntervalSec = 0 // Will be set per reminder
-	}
 
 	now := time.Now().UTC()
 
@@ -64,13 +57,15 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 		reminder.NextCRP = now
 		reminder.CRPCount = 0
 	} else {
-		// For recurring: calculate next_recurring from pattern
-		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
-		if err != nil {
-			return fmt.Errorf("failed to calculate next_recurring: %w", err)
+		// For recurring: use NextRecurring if set, otherwise calculate
+		if reminder.NextRecurring.IsZero() {
+			nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
+			if err != nil {
+				return fmt.Errorf("failed to calculate next_recurring: %w", err)
+			}
+			reminder.NextRecurring = nextRecurring
 		}
-		reminder.NextRecurring = nextRecurring
-		reminder.NextCRP = nextRecurring // CRP starts at FRP time
+		reminder.NextCRP = reminder.NextRecurring
 		reminder.CRPCount = 0
 	}
 
