@@ -17,9 +17,6 @@ import (
 	"remiaq/internal/services"
 	"remiaq/internal/worker"
 
-	// Swagger docs
-	_ "remiaq/docs"
-
 	// Import migrations package để PocketBase load migrations
 	_ "remiaq/migrations"
 )

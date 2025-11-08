@@ -73,18 +73,56 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 	record.Set("description", reminder.Description)
 	record.Set("type", reminder.Type)
 	record.Set("calendar_type", reminder.CalendarType)
-	record.Set("next_recurring", reminder.NextRecurring)
-	record.Set("next_crp", reminder.NextCRP)
-	record.Set("next_action_at", reminder.NextActionAt)
+	
+	// Convert time.Time to RFC3339 string format for PocketBase
+	if !reminder.NextRecurring.IsZero() {
+		record.Set("next_recurring", reminder.NextRecurring.Format(time.RFC3339Nano))
+	} else {
+		record.Set("next_recurring", nil)
+	}
+	
+	if !reminder.NextCRP.IsZero() {
+		record.Set("next_crp", reminder.NextCRP.Format(time.RFC3339Nano))
+	} else {
+		record.Set("next_crp", nil)
+	}
+	
+	if !reminder.NextActionAt.IsZero() {
+		record.Set("next_action_at", reminder.NextActionAt.Format(time.RFC3339Nano))
+	} else {
+		record.Set("next_action_at", nil)
+	}
+	
 	record.Set("crp_interval_sec", reminder.CRPIntervalSec)
 	record.Set("max_crp", reminder.MaxCRP)
 	record.Set("crp_count", reminder.CRPCount)
-	record.Set("last_crp_completed_at", reminder.LastCRPCompletedAt)
+	
+	if !reminder.LastCRPCompletedAt.IsZero() {
+		record.Set("last_crp_completed_at", reminder.LastCRPCompletedAt.Format(time.RFC3339Nano))
+	} else {
+		record.Set("last_crp_completed_at", nil)
+	}
+	
 	record.Set("repeat_strategy", reminder.RepeatStrategy)
 	record.Set("status", reminder.Status)
-	record.Set("snooze_until", reminder.SnoozeUntil)
-	record.Set("last_sent_at", reminder.LastSentAt)
-	record.Set("last_completed_at", reminder.LastCompletedAt)
+	
+	if !reminder.SnoozeUntil.IsZero() {
+		record.Set("snooze_until", reminder.SnoozeUntil.Format(time.RFC3339Nano))
+	} else {
+		record.Set("snooze_until", nil)
+	}
+	
+	if !reminder.LastSentAt.IsZero() {
+		record.Set("last_sent_at", reminder.LastSentAt.Format(time.RFC3339Nano))
+	} else {
+		record.Set("last_sent_at", nil)
+	}
+	
+	if !reminder.LastCompletedAt.IsZero() {
+		record.Set("last_completed_at", reminder.LastCompletedAt.Format(time.RFC3339Nano))
+	} else {
+		record.Set("last_completed_at", nil)
+	}
 
 	// Serialize RecurrencePattern if present
 	if reminder.RecurrencePattern != nil {
