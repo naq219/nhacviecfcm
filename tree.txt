@@ -1,0 +1,130 @@
+D:.
+│   .env
+│   .env.example
+│   .gitignore
+│   echo_change_git.bat
+│   firebase-credentials.json
+│   go.mod
+│   go.sum
+│   README.md
+│   v4_RemiAq API (Corrected).postman_collection.json
+│
+├───.trae
+│   └───rules
+│           project_rules.md
+│
+├───bin
+│       remiaq-linux-amd64
+│       remiaq-linux-arm64
+│
+├───cmd
+│   ├───server
+│   │       main.go
+│   │
+│   ├───simple_server
+│   └───worker
+├───config
+│       config.go
+│       config_test.go
+│
+├───docs
+│       API_DOCUMENTATION.md
+│       docs.go
+│       project_overview.md
+│       SRS.md
+│       swagger.json
+│       swagger.yaml
+│       thaydoitoanbo.md
+│       WORKER VER 2.md
+│       Yêu cầu chức năng mobile.md
+│
+├───docs_pocketbase_v031
+│       dbx.md
+│       go-collections.md
+│       go-console-commands.md
+│       go-database.md
+│       go-event-hooks.md
+│       go-filesystem.md
+│       go-jobs-scheduling.md
+│       go-logging.md
+│       go-migrations.md
+│       go-miscellaneous.md
+│       go-overview.md
+│       go-realtime.md
+│       go-record-proxy.md
+│       go-records.md
+│       go-rendering-templates.md
+│       go-routing.md
+│       go-sending-emails.md
+│       go-testing.md
+│
+├───internal
+│   ├───api
+│   ├───db
+│   │       db_utils.go
+│   │       mapper.go
+│   │       orm_helper.go
+│   │       transaction.go
+│   │
+│   ├───handlers
+│   │       query_handler.go
+│   │       reminder_handler.go
+│   │       system_status_handler.go
+│   │
+│   ├───middleware
+│   │       cors.go
+│   │       validation.go
+│   │
+│   ├───models
+│   │       reminder.go
+│   │
+│   ├───repository
+│   │   │   interface.go
+│   │   │
+│   │   └───pocketbase
+│   │           orm_utils.go
+│   │           query_repo.go
+│   │           reminder_orm_repo.go
+│   │           system_status_orm_repo.go
+│   │           user_orm_repo.go
+│   │
+│   ├───services
+│   │       fcm_service.go
+│   │       luna.txt
+│   │       lunar_calendar.go
+│   │       reminder_service.go
+│   │       schedule_calculator.go
+│   │
+│   ├───utils
+│   │       response.go
+│   │
+│   └───worker
+│           worker.go
+│
+├───migrations
+│       1671631110_init_schema.go
+│       1720166400_update_reminders_rules.go
+│
+├───pb_data
+│   │   auxiliary.db
+│   │   config.json
+│   │   data.db
+│   │
+│   └───storage
+├───scripts
+│       build_linux.bat
+│       newdb_server.bat
+│       run_windows.bat
+│       start_server.sh
+│
+├───temp
+├───test
+├───tmp
+│       changes.diff
+│
+└───web
+        index.html
+        README.md
+        remiaq_test.html
+        styles.css
+        system_status_test.html
