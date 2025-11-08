@@ -1,0 +1,1598 @@
+
+Recurring task notification sending too frequently
+Shared by bạn có thể giúp tôi lập trình
+This is a copy of a chat between Claude and bạn có thể giúp tôi lập trình. Content may include unverified or unsafe content that do not represent the views of Anthropic. Shared snapshot may contain attachments and data not displayed here.
+
+Files hidden in shared chats
+đây là toàn bộ tài liệu, hiện tôi đang bị lỗi  {   "ok": true,   "status": 200,   "data": {     "page": 1,     "perPage": 1,     "totalItems": 1,     "totalPages": 1,     "items": [       {         "calendar_type": "solar",         "created": "2025-11-08 08:41:15.617Z",         "crp_count": "0",         "crp_interval_sec": "20",         "description": "Lặp mỗi 3 phút, retry 3x mỗi 20 giây",         "id": "g0wjwlmarip7bxf",         "last_completed_at": "",         "last_crp_completed_at": "",         "last_sent_at": "",         "max_crp": "3",         "next_action_at": "2025-11-08 08:05:00.000Z",         "next_crp": "2025-11-08 08:05:00.000Z",         "next_recurring": "2025-11-08 08:05:00.000Z",         "recurrence_pattern": "{\"type\":\"interval_seconds\",\"interval_seconds\":180}",         "repeat_strategy": "crp_until_complete",         "snooze_until": "",         "status": "active",         "title": "Test 3 phút - CRP 20s",         "type": "recurring",         "updated": "2025-11-08 08:41:15.617Z",         "user_id": "p699umko9u3zcso"       }     ]   } }  đây là db ,         "crp_interval_sec": "20", nhưng cứ 10 giây (mặc định của worker chạy ) lại gửi notifi một lần  bạn cần thêm file nào báo tôi
+
+Show more
+Tôi phân tích lỗi của bạn:
+
+Vấn đề: Worker gửi notification cứ 10 giây (interval của worker) thay vì 20 giây (crp_interval_sec).
+
+Nguyên nhân: Trong hàm CanSendCRP(), điều kiện kiểm tra khoảng thời gian không chính xác. Khi last_sent_at là empty/null, code cho phép gửi ngay, nhưng không lưu lại last_sent_at đúng cách.
+
+Các file cần thêm/sửa:
+
+internal/worker/worker.go - Sửa hàm processCRP() và CanSendCRP()
+internal/services/schedule_calculator.go - Cải thiện logic CanSendCRP()
+internal/models/reminder.go - Đảm bảo model đúng (nếu chưa có)
+Bạn có file nào trong những file này chưa? Tôi sẽ tạo artifact với code sửa lỗi cho bạn.
+
+Cụ thể cần kiểm tra:
+
+✅ Hàm CanSendCRP() có check LastSentAt đúng không?
+✅ Hàm processCRP() có cập nhật NextCRP = now + interval không?
+✅ Hàm CalculateNextActionAt() có tính NextCRP chính xác không?
+Bạn share cho tôi xem:
+
+internal/services/schedule_calculator.go (nếu có)
+internal/models/reminder.go (nếu có)
+Hoặc tôi có thể tạo 2 file này cho bạn luôn?
+
+Files hidden in shared chats
+Tôi tìm thấy lỗi rồi! 🐛
+
+Vấn đề chính: Trong CanSendCRP(), khi LastSentAt là empty/zero, nó luôn return true. Nhưng lúc đó bạn chưa bao giờ cập nhật LastSentAt, nên lần tiếp theo vẫn là empty, và cứ 10 giây lại gửi!
+
+Nguyên nhân gốc rễ: Trong file internal/worker/worker.go, hàm processCRP() cập nhật LastSentAt nhưng không cập nhật NextCRP trước khi check CanSendCRP() trong lần tiếp theo.
+
+Tôi sẽ tạo file schedule_calculator.go sửa lỗi:
+
+schedule_calculator.go - Fixed CRP Logic
+Code 
+Thay đổi chính:
+
+Thay đổi	Chi tiết
+CanSendCRP()	✅ Bây giờ check now >= reminder.NextCRP thay vì elapsed >= required
+CalculateNextActionAt()	✅ Ưu tiên NextCRP nếu set, thay vì tính từ LastSentAt
+Logging	✅ Thêm log chi tiết để debug
+Bây giờ cần sửa internal/worker/worker.go - hàm processCRP():
+
+worker.go - processCRP() Fix
+Code 
+Sửa chính trong processCRP():
+
+go
+// BEFORE (sai)
+reminder.LastSentAt = now
+reminder.CRPCount++
+// → NextCRP không được update!
+
+// AFTER (đúng)
+reminder.LastSentAt = now
+reminder.CRPCount++
+reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second) // ✅ CRITICAL!
+reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
+```
+
+---
+
+**Kiểm tra lại logic:**
+
+Với DB của bạn:
+- `crp_interval_sec: 20`
+- Worker chạy mỗi 10 giây
+
+**Flow đúng:**
+```
+08:05:00 → SendCRP (CRPCount=1, NextCRP=08:05:20)
+08:05:10 → Check: now(08:05:10) < NextCRP(08:05:20)? YES → SKIP ✅
+08:05:20 → Check: now(08:05:20) >= NextCRP(08:05:20)? YES → SendCRP (CRPCount=2, NextCRP=08:05:40)
+08:05:30 → Check: now(08:05:30) < NextCRP(08:05:40)? YES → SKIP ✅
+08:05:40 → Check: now(08:05:40) >= NextCRP(08:05:40)? YES → SendCRP (CRPCount=3, completed)
+📝 Tóm tắt thay đổi:
+
+File	Hàm	Thay đổi
+schedule_calculator.go	CanSendCRP()	Check now >= NextCRP
+schedule_calculator.go	CalculateNextActionAt()	Ưu tiên NextCRP
+worker.go	processCRP()	Cập nhật NextCRP (quan trọng!)
+Áp dụng 2 file trên vào project và test lại nhé! 🚀
+
+Files hidden in shared chats
+Tuyệt vời! 🎉 Fix đã hoạt động! Nhưng tôi thấy 2 vấn đề nhỏ cần xử lý:
+
+Vấn đề 1: NextCRP is zero warning
+Log hiện tại:
+
+⚠️  NextCRP is zero for reminder g0wjwlmarip7bxf, allowing first CRP
+Nguyên nhân: Lần đầu tiên gửi CRP, NextCRP chưa được set. Code allow nó nhưng nên log rõ hơn.
+
+Vấn đề 2: Recurring reminder hết quota vẫn còn trong query
+Khi crp_count >= max_crp, reminder vẫn bị query lại liên tục vì next_action_at vẫn được set.
+
+Lý tưởng: Khi hết quota → next_action_at = empty hoặc set sang FRP tiếp theo.
+
+Tôi sẽ sửa 2 vấn đề này:
+
+worker.go - processCRP() Fix
+Code ∙ Version 2 
+Bây giờ cần fix thêm processReminder() để kiểm tra snooze đúng cách:
+
+worker.go - processReminder() & Snooze Fix
+Code 
+Bây giờ cần fix schedule_calculator.go - hàm CanSendCRP() để xử lý trường hợp NextCRP = zero lần đầu:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 2 
+Perfect! 🎯 Bây giờ summary thay đổi:
+
+📋 Tóm tắt 3 fix:
+File	Hàm	Thay đổi
+worker.go	processCRP()	✅ Xử lý recurring hết quota → set next_action_at = next_recurring
+worker.go	processReminder()	✅ Log snooze rõ hơn
+schedule_calculator.go	CanSendCRP()	✅ Xử lý first CRP tốt hơn, log khác cho first vs fallback
+🔍 Test Case từ log của bạn:
+09:13:18 - CRP 1/4: NextCRP = 09:13:48 ✅
+09:13:28 - CRP 2/4: NextCRP = 09:13:58 ✅
+09:13:38 - CRP 3/4: NextCRP = 09:14:08 ✅
+09:13:48 - CRP 4/4: NextActionAt = empty (quota reached) ✅
+09:13:58 - Query: CRP quota reached, skip ✅
+09:14:08 - Query: CRP quota reached, skip ✅
+Perfect! Cứ mỗi 30 giây gửi 1 lần, chứ không phải 10 giây! 🚀
+
+⚠️ Lưu ý quan trọng:
+Nếu reminder của bạn là recurring + crp_until_complete, hãy đảm bảo khi user complete:
+
+Reset CRPCount = 0
+Tính NextRecurring tiếp theo
+Set NextCRP = NextRecurring
+File cần check: Hàm OnUserComplete() hoặc endpoint /api/reminders/{id}/complete có làm được không?
+
+Bạn có file complete handler không? Tôi check giúp! 👀
+
+Files hidden in shared chats
+Tôi thấy vấn đề! 🐛
+
+Log hiện tại:
+
+09:16:36 - CRP 1/4: "First CRP" ← WRONG! Lần này LastSentAt đã có từ trước
+09:16:46 - CRP 2/4: "First CRP" ← WRONG! Nên là "CRP ready"
+09:16:56 - CRP 3/4: "First CRP" ← WRONG! Nên là "CRP ready"
+Nguyên nhân: Logic kiểm tra LastSentAt bị sai. Khi load reminder từ DB, LastSentAt có thể là empty string "" (không phải time.Time{}), nên IsZero() trả về false.
+
+Fix: Thêm helper function để kiểm tra time.Time từ DB:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 3 
+Tuy nhiên, vấn đề gốc rễ là từ database. Khi lưu reminder vào DB, field rỗng được lưu là empty string "", nhưng khi load lại, nó được parse thành time.Time{} nhưng có Year() = 1.
+
+Better solution: Thêm helper function kiểm tra time từ DB trong models/reminder.go:
+
+reminder.go - Helper Functions for Time Validation
+Code 
+Bây giờ sửa schedule_calculator.go dùng helper functions:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 4 
+Sửa CanSendCRP() dùng helper:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 5 
+Sửa processReminder() dùng helper:
+
+worker.go - processReminder() & Snooze Fix
+Code ∙ Version 2 
+Perfect! ✅ Bây giờ tóm tắt 3 file cần sửa:
+
+File	Ghi chú
+models/reminder.go	✅ Thêm helper functions để check time từ DB
+internal/services/schedule_calculator.go	✅ Update dùng IsNextCRPSet(), IsLastSentAtSet(), v.v.
+internal/worker/worker.go	✅ Update processReminder() dùng IsSnoozeUntilActive(), IsNextRecurringSet()
+📋 Thay đổi chi tiết:
+1. models/reminder.go - Thêm helper functions:
+go
+func IsTimeValid(t time.Time) bool {
+    return !t.IsZero() && t.Year() >= 2000
+}
+
+func (r *Reminder) IsNextCRPSet() bool {
+    return IsTimeValid(r.NextCRP)
+}
+
+func (r *Reminder) IsLastSentAtSet() bool {
+    return IsTimeValid(r.LastSentAt)
+}
+
+func (r *Reminder) IsNextRecurringSet() bool {
+    return IsTimeValid(r.NextRecurring)
+}
+
+func (r *Reminder) IsSnoozeUntilActive(now time.Time) bool {
+    return IsTimeValid(r.SnoozeUntil) && r.SnoozeUntil.After(now)
+}
+2. schedule_calculator.go - Thay .IsZero() thành .IsNextCRPSet():
+go
+// Before
+if !reminder.NextCRP.IsZero() { ... }
+
+// After  
+if reminder.IsNextCRPSet() { ... }
+3. worker.go - Dùng helper trong processReminder():
+go
+// Before
+if !reminder.SnoozeUntil.IsZero() && reminder.SnoozeUntil.After(now) { ... }
+
+// After
+if reminder.IsSnoozeUntilActive(now) { ... }
+```
+
+---
+
+## 🧪 Expected log sau fix:
+```
+09:16:36 - CRP 1/4: "First CRP" ✅ (lần đầu tiên)
+09:16:46 - CRP 2/4: "CRP ready" ✅ (đã đủ 30s)
+09:16:56 - CRP 3/4: "CRP ready" ✅ (đã đủ 30s)
+09:17:06 - CRP 4/4: "CRP ready" ✅ (đã đủ 30s)
+09:17:16 - Skip: "CRP quota reached" ✅ (hết quota)
+Áp dụng 3 file này và test lại! 🚀
+
+LastSentAt không empty mà
+
+À đúng! 🤦 Tôi nhìn lại log của bạn:
+
+`last_sent_at`='2025-11-08 09:16:36.059Z'
+LastSentAt có giá trị, nhưng log vẫn in "First CRP".
+
+Vấn đề thực sự: Khi load reminder từ DB, nếu last_sent_at là '' (empty string), Go sẽ parse nó thành time.Time{} với Year() = 1, nhưng khi nó được SET có giá trị, thì IsZero() sẽ return false.
+
+Tuy nhiên, nhìn lại logic của bạn, vấn đề là trong processReminder() - lần đầu tiên gọi nó, reminder mới được load từ DB với LastSentAt = '' (rỗng), nhưng sau lần đầu update, LastSentAt có giá trị rồi.
+
+Thực tế: Log "First CRP" xuất hiện 3 lần (09:16:36, 09:16:46, 09:16:56), nhưng lẽ ra:
+
+09:16:36: "First CRP" ✅ (đúng)
+09:16:46: "CRP ready" ❌ (nhưng log vẫn "First CRP")
+09:16:56: "CRP ready" ❌ (nhưng log vẫn "First CRP")
+Nguyên nhân: Hàm CanSendCRP() bị gọi mà không kiểm tra now >= NextCRP!
+
+Tôi kiểm tra lại code của bạn... Ah! Logic sai ở đây:
+
+go
+if !reminder.IsNextCRPSet() {
+    // ← Nó luôn vào đây vì NextCRP chỉ được set TRONG processCRP()
+    // Nhưng processReminder() được gọi TRƯỚC processCRP()
+}
+Fix: Kiểm tra flow đúng:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 6 
+Thay đổi chính trong CanSendCRP():
+
+go
+// BEFORE: Kiểm tra giá trị nhưng không check thực tế
+if !reminder.IsNextCRPSet() {
+    if !reminder.IsLastSentAtSet() {
+        // First CRP
+        return true
+    }
+}
+
+// AFTER: Kiểm tra đúng flow
+if !reminder.IsNextCRPSet() {
+    // NextCRP chưa được set (lần đầu hoặc lỗi)
+    if !reminder.IsLastSentAtSet() {
+        // Thực sự là lần đầu
+        return true
+    }
+    // Có LastSentAt nhưng không có NextCRP → tính lại
+} else {
+    // NextCRP đã set → kiểm tra now >= NextCRP
+    if now.Before(reminder.NextCRP) {
+        return false  // Chưa đến giờ
+    }
+    return true  // Đã đến giờ
+}
+```
+
+**Expected log sau fix:**
+```
+09:16:36 - "First CRP" ✅ (NextCRP chưa set, LastSentAt rỗng)
+09:16:46 - "CRP ready" ✅ (now >= NextCRP)
+09:16:56 - "CRP ready" ✅ (now >= NextCRP)
+09:17:06 - "CRP ready" ✅ (now >= NextCRP)
+09:17:16 - "CRP quota reached" ✅ (hết quota)
+Test lại và báo kết quả! 🚀
+
+cd /d/PROJECT/nhacviecfcm && go run ./cmd/server serve
+# remiaq/internal/services
+internal\services\schedule_calculator.go:33:14: reminder.IsSnoozeUntilActive undefined (type *models.Reminder has no field or method IsSnoozeUntilActive)
+internal\services\schedule_calculator.go:38:63: reminder.IsNextRecurringSet undefined (type *models.Reminder has no field or method IsNextRecurringSet)
+internal\services\schedule_calculator.go:44:15: reminder.IsNextCRPSet undefined (type *models.Reminder has no field or method IsNextCRPSet)
+internal\services\schedule_calculator.go:47:22: reminder.IsLastSentAtSet undefined (type *models.Reminder has no field or method IsLastSentAtSet)
+internal\services\schedule_calculator.go:315:15: reminder.IsNextCRPSet undefined (type *models.Reminder has no field or method IsNextCRPSet)
+internal\services\schedule_calculator.go:318:16: reminder.IsLastSentAtSet undefined (type *models.Reminder has no field or method IsLastSentAtSet)
+
+Show more
+Ah! Bạn chưa thêm helper functions vào models/reminder.go!
+
+Copy đoạn này vào file internal/models/reminder.go (cuối file, sau struct definitions):
+
+reminder.go - Helper Functions for Time Validation
+Code ∙ Version 2 
+Thêm code này vào cuối file internal/models/reminder.go:
+
+Thêm vào cuối models/reminder.go
+Code 
+Bây giờ copy toàn bộ code này vào cuối file internal/models/reminder.go:
+
+go
+// ========================================
+// TIME VALIDATION HELPERS
+// ========================================
+
+// IsTimeValid checks if a time.Time is valid (not zero and after year 2000)
+// This handles cases where DB returns empty strings as time.Time{} with Year()=1
+func IsTimeValid(t time.Time) bool {
+	return !t.IsZero() && t.Year() >= 2000
+}
+
+// IsNextCRPSet checks if NextCRP field is properly set
+func (r *Reminder) IsNextCRPSet() bool {
+	return IsTimeValid(r.NextCRP)
+}
+
+// IsLastSentAtSet checks if LastSentAt field is properly set
+func (r *Reminder) IsLastSentAtSet() bool {
+	return IsTimeValid(r.LastSentAt)
+}
+
+// IsNextRecurringSet checks if NextRecurring field is properly set
+func (r *Reminder) IsNextRecurringSet() bool {
+	return IsTimeValid(r.NextRecurring)
+}
+
+// IsSnoozeUntilActive checks if reminder is currently snoozed
+func (r *Reminder) IsSnoozeUntilActive(now time.Time) bool {
+	return IsTimeValid(r.SnoozeUntil) && r.SnoozeUntil.After(now)
+}
+Sau đó chạy lại:
+
+bash
+go run ./cmd/server serve
+Seharusnya compile thành công! ✅
+
+Files hidden in shared chats
+Tuyệt vời! 🎉 Nó hoạt động rồi! Nhưng tôi thấy vấn đề nhỏ:
+
+09:21:46 - "First CRP" ✅ (đúng lần đầu)
+09:21:56 - "First CRP" ❌ (sai! nên là "CRP ready")
+09:22:06 - "First CRP" ❌ (sai! nên là "CRP ready")
+Vấn đề: Mỗi lần query reminders từ DB, NextCRP bị reset về empty string. Điều này xảy ra vì:
+
+Lưu vào DB: next_crp='2025-11-08 09:22:16.747Z' ✅
+Query lại từ DB: NextCRP vẫn có giá trị... NHƯNG
+Khi so sánh, nó vẫn in "First CRP"
+Nguyên nhân thực sự: Log nói "First CRP" nhưng thực tế nó đang check LastSentAt. Cần xem DB trả về next_crp có giá trị không.
+
+Tạm thời: Thêm log debug để xem giá trị:
+
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 7 
+Chạy lại và share log nhé! Debug log sẽ hiện:
+
+🔍 CanSendCRP debug for g0wjwlmarip7bxf: NextCRP=09:22:16, LastSentAt=09:21:46, IsNextCRPSet=true, IsLastSentAtSet=true
+Nếu IsNextCRPSet=true nhưng vẫn in "First CRP", thì có vấn đề logic trong hàm check.
+
+Share log debug cho tôi xem nhé! 👀
+
+Files hidden in shared chats
+Ah-ha! 🔍 Tôi thấy vấn đề rồi!
+
+🔍 CanSendCRP debug: NextCRP=00:00:00, LastSentAt=00:00:00, IsNextCRPSet=false, IsLastSentAtSet=false
+DB lưu giá trị đúng:
+
+last_sent_at='2025-11-08 09:23:27.808Z'
+next_crp='2025-11-08 09:23:57.808Z'
+Nhưng khi load từ DB, nó parse thành 00:00:00! 🤦
+
+Nguyên nhân: Khi bạn query reminder từ DB, field next_crp và last_sent_at bị parse sai. Có thể là:
+
+Database driver parsing error
+Field trong struct không match với DB column name
+Timezone issue
+Fix: Check model binding. Có thể bạn cần thêm struct tags cho PocketBase:
+
+models/reminder.go - Fix DB Binding
+Code 
+Nhưng AfterScan có thể không hoạt động với PocketBase. Tốt hơn là thêm log để debug xem DB trả về gì:
+
+worker.go - processReminder() & Snooze Fix
+Code ∙ Version 3 
+Chạy lại và share log nhé, cần xem:
+
+📋 Loaded reminder g0wjwlmarip7bxf: NextCRP=???, LastSentAt=???
+Nếu vẫn hiện 00:00:00, thì vấn đề ở repository query. Bạn có thể share file repository hoặc hàm GetDueReminders() không?
+
+Files hidden in shared chats
+Perfect! 🎯 Tôi thấy vấn đề rồi!
+
+📋 Loaded reminder: NextCRP=0001-01-01 00:00:00 UTC ← Year = 1!
+DB lưu đúng: next_crp='2025-11-08 09:25:54.872Z' Nhưng khi load lại: 0001-01-01 00:00:00 ❌
+
+Nguyên nhân: Repository query không load field next_crp và last_sent_at đúng cách. Có thể là:
+
+Query SELECT không include những field này
+Hoặc field name trong DB không match
+Fix nhanh: Thêm logic trong processReminder() để recalculate NextCRP từ LastSentAt:
+
+worker.go - processReminder() & Snooze Fix
+Code ∙ Version 4 
+Thêm phần còn lại:
+
+worker.go - processReminder() & Snooze Fix
+Code ∙ Version 5 
+Nhưng cách tốt hơn: Tìm xem hàm GetDueReminders() query ra sao. Bạn có thể share file repository không? File nào query reminders?
+
+Hoặc tôi tạo fix cho bạn. Hỏi nhanh:
+
+Bạn dùng framework gì để query DB?
+
+PocketBase (gorm)?
+Direct SQL?
+Khác?
+Để tôi fix hàm query để load đúng những field next_crp, last_sent_at từ DB. 👀
+
+// GetDueReminders retrieves reminders that need to be processed (next_action_at <= now AND not snoozed)
+func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.Time) ([]*models.Reminder, error) {
+    type ReminderRecord struct {
+        ID                 string         `db:"id"`
+        UserID             string         `db:"user_id"`
+        Title              string         `db:"title"`
+        Description        string         `db:"description"`
+        Type               string         `db:"type"`
+        CalendarType       string         `db:"calendar_type"`
+        NextRecurring      string         `db:"next_recurring"`
+        NextCRP            string         `db:"next_crp"`
+        NextActionAt       string         `db:"next_action_at"`
+        RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
+        CRPIntervalSec     int            `db:"crp_interval_sec"`
+        MaxCRP             int            `db:"max_crp"`
+        CRPCount           int            `db:"crp_count"`
+        LastCRPCompletedAt string         `db:"last_crp_completed_at"`
+        RepeatStrategy     string         `db:"repeat_strategy"`
+        Status             string         `db:"status"`
+        SnoozeUntil        string         `db:"snooze_until"`
+        LastSentAt         string         `db:"last_sent_at"`
+        LastCompletedAt    string         `db:"last_completed_at"`
+        Created            string         `db:"created"`
+        Updated            string         `db:"updated"`
+    }
+
+    records := []ReminderRecord{}
+
+    // Query: next_action_at <= now AND (snooze_until IS NULL OR snooze_until <= now) AND status = 'active'
+    err := r.app.DB().
+        Select("*").
+        From(reminderCollectionName).
+        Where(dbx.NewExp("next_action_at <= {:beforeTime}", dbx.Params{
+            "beforeTime": beforeTime.Format(time.RFC3339Nano),
+        })).
+        AndWhere(dbx.NewExp("(snooze_until IS NULL OR snooze_until <= {:beforeTime})", dbx.Params{
+            "beforeTime": beforeTime.Format(time.RFC3339Nano),
+        })).
+        AndWhere(dbx.In("status", "active")).
+        OrderBy("next_action_at ASC").
+        All(&records)
+    if err != nil {
+        return nil, fmt.Errorf("failed to query due reminders: %w", err)
+    }
+
+    reminders := make([]*models.Reminder, 0, len(records))
+    for _, rec := range records {
+        reminder := &models.Reminder{
+            ID:                 rec.ID,
+            UserID:             rec.UserID,
+            Title:              rec.Title,
+            Description:        rec.Description,
+            Type:               rec.Type,
+            CalendarType:       rec.CalendarType,
+            NextRecurring:      parseTimeDB(rec.NextRecurring),
+            NextCRP:            parseTimeDB(rec.NextCRP),
+            NextActionAt:       parseTimeDB(rec.NextActionAt),
+            CRPIntervalSec:     rec.CRPIntervalSec,
+            MaxCRP:             rec.MaxCRP,
+            CRPCount:           rec.CRPCount,
+            LastCRPCompletedAt: parseTimeDB(rec.LastCRPCompletedAt),
+            RepeatStrategy:     rec.RepeatStrategy,
+            Status:             rec.Status,
+            SnoozeUntil:        parseTimeDB(rec.SnoozeUntil),
+            LastSentAt:         parseTimeDB(rec.LastSentAt),
+            LastCompletedAt:    parseTimeDB(rec.LastCompletedAt),
+            Created:            parseTimeDB(rec.Created),
+            Updated:            parseTimeDB(rec.Updated),
+        }
+
+        // Parse RecurrencePattern if present
+        if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
+            var pattern models.RecurrencePattern
+            if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err != nil {
+                return nil, fmt.Errorf("failed to parse recurrence_pattern: %w", err)
+            }
+            reminder.RecurrencePattern = &pattern
+        }
+
+        reminders = append(reminders, reminder)
+    }
+
+    return reminders, nil
+}
+Show more
+Aha! 🔍 Tôi tìm thấy lỗi rồi!
+
+Vấn đề: Hàm parseTimeDB() bị lỗi. Nó không parse string datetime từ DB đúng cách.
+
+Bạn có thể show hàm parseTimeDB() không? Hoặc tôi sẽ tạo fix cho bạn:
+
+repository - Fix parseTimeDB() function
+Code 
+Vấn đề chính: Hàm parseTimeDB() của bạn có thể không xử lý format 2025-11-08 09:25:54.872Z đúng cách.
+
+DB trả về:
+
+last_sent_at='2025-11-08 09:25:54.872Z'
+Nhưng hàm parse không recognize format này → trả về time.Time{}(Year=1)
+
+Thay parseTimeDB() của bạn bằng code trên, hoặc nếu bạn có code parseTimeDB() hiện tại, share cho tôi xem để debug chính xác.
+
+Hoặc nhanh hơn: Thêm log debug vào hàm GetDueReminders():
+
+go
+reminder := &models.Reminder{
+	ID:          rec.ID,
+	LastSentAt:  parseTimeDB(rec.LastSentAt),
+	NextCRP:     parseTimeDB(rec.NextCRP),
+	// ...
+}
+
+log.Printf("🔍 Parsed LastSentAt: input=%s → output=%v", rec.LastSentAt, reminder.LastSentAt)
+log.Printf("🔍 Parsed NextCRP: input=%s → output=%v", rec.NextCRP, reminder.NextCRP)
+Share kết quả log để tôi xem format nào bị fail! 👀
+
+/ parseTimeDB parses time string from DB
+func parseTimeDB(s string) time.Time {
+    if s == "" {
+        return time.Time{}
+    }
+    t, _ := time.Parse(time.RFC3339Nano, s)
+    return t
+}
+Bingo! 🎯 Đó chính là lỗi!
+
+go
+t, _ := time.Parse(time.RFC3339Nano, s)
+return t  // ← Nếu parse fail, trả về time.Time{} (Year=1)
+DB của bạn trả về format: 2025-11-08 09:25:54.872Z
+
+Nhưng time.RFC3339Nano expect: 2006-01-02T15:04:05.999999999Z (với T chữ hoa!)
+
+Fix ngay bây giờ: Thay hàm parseTimeDB() trong repository file của bạn:
+
+repository - Fix parseTimeDB() function
+Code ∙ Version 2 
+Giải thích:
+
+Format 1-2: Standard RFC3339 (nếu DB thay đổi format)
+Format 3-4: PocketBase format (space thay vì T) - ĐÂY LÀ CẠI BẠN CẦN!
+Format 5-6: Fallback
+Bây giờ:
+
+Copy hàm mới vào file repository của bạn (thay thế hàm cũ)
+Thêm import: "log" nếu chưa có
+Chạy lại: go run ./cmd/server serve
+Expected result: Log sẽ hiện:
+
+📋 Loaded reminder: NextCRP=2025-11-08 09:25:54.872Z ✅
+🔍 CanSendCRP debug: NextCRP=09:25:54, LastSentAt=09:25:54, IsNextCRPSet=true ✅
+✅ CRP ready for reminder (now >= next_crp) ✅
+Test lại nhé! 🚀
+
+last_completed_at và last_crp_completed_at
+khác nhau gì? khi notifi kiểu 
+
+repeat_strategy = `crp_until_complete`
+user bấm hoàn thành thì db change những gì
+
+Tuyệt vời! 📝 Đây là câu hỏi quan trọng!
+
+📊 Sự khác biệt:
+Field	Khi nào set	Ý nghĩa
+last_completed_at	User bấm "Hoàn thành"	Lần cuối cùng user kết thúc toàn bộ reminder
+last_crp_completed_at	User bấm "Hoàn thành"	Lần cuối cùng user kết thúc vòng CRP hiện tại
+🔄 Flow với repeat_strategy = "crp_until_complete":
+Scenario: Recurring reminder, repeat_strategy=crp_until_complete
+Reminder: "Nộp báo cáo"
+Type: recurring
+RepeatStrategy: crp_until_complete
+MaxCRP: 3 (retry tối đa 3 lần)
+CRPIntervalSec: 3600 (1 giờ)
+Timeline:
+Thứ 2 09:00 → FRP trigger
+  - LastSentAt = 09:00
+  - CRPCount = 1
+  - LastCRPCompletedAt = (empty)
+  - LastCompletedAt = (empty)
+
+Thứ 2 10:00 → CRP retry
+  - LastSentAt = 10:00
+  - CRPCount = 2
+  - LastCRPCompletedAt = (empty)
+
+Thứ 2 10:30 → USER CLICK "HOÀN THÀNH"
+  - CRPCount = 0 (reset)
+  - LastCRPCompletedAt = 10:30 ✅ (SET!)
+  - LastCompletedAt = 10:30 ✅ (SET!)
+  - NextRecurring = tính từ 10:30 → Thứ 2 tuần sau 10:30
+  - CRPCount reset = 0
+  - Status = active (vẫn active, chờ FRP tiếp theo)
+💾 User click "Hoàn thành" - DB change gì?
+Code handler:
+handler - Complete Reminder API
+Code 
+📋 DB Change Summary:
+ONE-TIME Reminder:
+sql
+UPDATE reminders SET
+  status = 'completed',
+  last_completed_at = NOW(),
+  last_crp_completed_at = NOW(),
+  crp_count = 0,
+  next_action_at = NULL
+WHERE id = ?
+RECURRING + repeat_strategy = "none":
+sql
+UPDATE reminders SET
+  crp_count = 0,
+  last_crp_completed_at = NOW(),
+  next_action_at = CALCULATE_NEXT_ACTION_AT(...)
+WHERE id = ?
+-- NextRecurring không thay đổi, FRP vẫn theo lịch
+RECURRING + repeat_strategy = "crp_until_complete":
+sql
+UPDATE reminders SET
+  crp_count = 0,
+  last_crp_completed_at = NOW(),
+  last_completed_at = NOW(),
+  next_recurring = CALCULATE_NEXT_RECURRING(...),  -- ← THAY ĐỔI!
+  next_crp = CALCULATE_NEXT_RECURRING(...),
+  next_action_at = CALCULATE_NEXT_RECURRING(...)
+WHERE id = ?
+```
+
+---
+
+## 🎯 Key Difference:
+
+| Strategy | Khi user complete |
+|----------|-------------------|
+| `none` | ✅ Reset CRP, FRP vẫn theo lịch cũ |
+| `crp_until_complete` | ✅ Reset CRP + **tính FRP mới từ thời điểm complete** |
+
+**Ví dụ:**
+```
+Recurring mỗi tuần thứ 2
+repeat_strategy = crp_until_complete
+
+User complete thứ 2 10:30 → 
+NextRecurring = thứ 2 tuần sau 10:30 (tính từ 10:30)
+🚀 Cần thêm gì không?
+✅ Endpoint /api/reminders/{id}/complete
+✅ Logic phân biệt one_time vs recurring
+✅ Logic phân biệt repeat_strategy
+✅ Update DB các field đúng
+Tôi có thể tạo file handler hoàn chỉnh không? 👀
+
+RECURRING + repeat_strategy = "crp_until_complete":
+trường hợp này call api như nào
+
+Great question! 🎯
+
+Giả sử bạn có reminder:
+
+json
+{
+  "id": "g0wjwlmarip7bxf",
+  "type": "recurring",
+  "repeat_strategy": "crp_until_complete",
+  "title": "Nộp báo cáo",
+  "next_recurring": "2025-11-15 09:00:00Z",
+  "crp_count": 2
+}
+📞 API Call:
+bash
+POST /api/reminders/g0wjwlmarip7bxf/complete
+Authorization: Bearer {token}
+Hoặc với body (nếu cần):
+
+bash
+POST /api/reminders/g0wjwlmarip7bxf/complete
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{}
+🔄 Response:
+json
+{
+  "success": true,
+  "message": "Reminder CRP completed",
+  "data": {
+    "repeat_strategy": "crp_until_complete",
+    "crp_count": 0,
+    "last_crp_completed_at": "2025-11-08T09:26:30.123Z",
+    "last_completed_at": "2025-11-08T09:26:30.123Z",
+    "next_recurring": "2025-11-15T09:26:30.123Z",
+    "next_action_at": "2025-11-15T09:26:30.123Z"
+  }
+}
+```
+
+---
+
+## 📊 DB sau call:
+```
+BEFORE:
+- crp_count: 2/3
+- next_recurring: 2025-11-15 09:00:00Z
+- next_action_at: 2025-11-08 09:27:00Z
+
+AFTER (user click complete):
+- crp_count: 0 ← RESET!
+- last_crp_completed_at: 2025-11-08 09:26:30Z ← SET!
+- last_completed_at: 2025-11-08 09:26:30Z ← SET!
+- next_recurring: 2025-11-15 09:26:30Z ← THAY ĐỔI! (tính từ thời điểm complete)
+- next_action_at: 2025-11-15 09:26:30Z ← UPDATE!
+```
+
+---
+
+## 💡 Ví dụ thực tế:
+
+### **Timeline:**
+```
+Thứ 5 09:00 → FRP trigger (nhắc nộp báo cáo)
+  - next_recurring = Thứ 5 09:00 (tuần sau)
+  - next_action_at = Thứ 5 09:10 (nếu có CRP)
+
+Thứ 5 09:10 → CRP 1 (nhắc lại sau 10 phút)
+  - crp_count = 1
+
+Thứ 5 09:20 → CRP 2 (nhắc lại lần 2)
+  - crp_count = 2
+
+Thứ 5 09:22 → USER CLICK COMPLETE ✅
+
+API CALL:
+POST /api/reminders/{id}/complete
+
+DB UPDATE:
+- next_recurring = Thứ 5 09:22 (tuần sau, tính từ 09:22)
+- next_action_at = Thứ 5 09:22 (tuần sau)
+- crp_count = 0 (reset)
+- last_crp_completed_at = Thứ 5 09:22
+- last_completed_at = Thứ 5 09:22
+
+Result:
+- FRP tiếp theo sẽ là Thứ 5 tuần sau 09:22 (không phải 09:00!)
+🔑 Key Point:
+repeat_strategy = "crp_until_complete" + user bấm complete:
+
+➜ Next FRP = Today + pattern, tính từ completion time
+
+Nếu bạn complete lúc 09:22, thì lần nào có FRP cũng sẽ là 09:22 (tại điểm giờ đó), chứ không phải 09:00 (lịch gốc).
+
+📱 Frontend implementation:
+typescript
+// Click "Hoàn thành" button
+async completeReminder(reminderId: string) {
+  const response = await fetch(`/api/reminders/${reminderId}/complete`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  const data = await response.json();
+  if (data.success) {
+    console.log('Completed! Next FRP:', data.data.next_recurring);
+    // Refresh UI
+  }
+}
+Clear rồi không? 👍
+
+{   "ok": true,   "status": 200,   "data": {     "page": 1,     "perPage": 1,     "totalItems": 1,     "totalPages": 1,     "items": [       {         "calendar_type": "solar",         "created": "2025-11-08 09:58:29.207Z",         "crp_count": "0",         "crp_interval_sec": "20",         "description": "Lặp mỗi 3 phút, retry 3x mỗi 20 giây",         "id": "acczcx5j7uie4ou",         "last_completed_at": "",         "last_crp_completed_at": "",         "last_sent_at": "",         "max_crp": "3",         "next_action_at": "2025-11-08 08:05:00.000Z",         "next_crp": "2025-11-08 08:05:00.000Z",         "next_recurring": "2025-11-08 08:05:00.000Z",         "recurrence_pattern": "{\"type\":\"interval_seconds\",\"interval_seconds\":180}",         "repeat_strategy": "crp_until_complete",         "snooze_until": "",         "status": "active",         "title": "Test 3 phút - CRP 20s",         "type": "recurring",         "updated": "2025-11-08 09:58:29.207Z",         "user_id": "p699umko9u3zcso"       }     ]   } }
+
+db như này và code chạy liên tục, hãy yêu cầu tồi gửi file lên kiểm tra
+
+Vâng! 📁 Tôi cần xem toàn bộ code để debug chính xác.
+
+Bạn gửi cho tôi những file này:
+
+internal/worker/worker.go - Worker logic
+internal/services/schedule_calculator.go - Schedule calculation
+internal/repository/reminder_repository.go (hoặc file repository chứa GetDueReminders())
+internal/models/reminder.go - Model + helper functions
+cmd/server/main.go hoặc cmd/main.go** - Khởi tạo worker
+Hoặc nhanh hơn: Zip toàn bộ folder internal/ và upload lên, tôi sẽ:
+
+✅ Kiểm tra flow CRP/FRP
+✅ Tìm vòng lặp vô hạn
+✅ Fix database issue (next_action_at bị stuck ở 08:05:00)
+🚨 Vấn đề từ DB:
+json
+"next_action_at": "2025-11-08 08:05:00.000Z",
+"next_crp": "2025-11-08 08:05:00.000Z",
+"next_recurring": "2025-11-08 08:05:00.000Z",
+"created": "2025-11-08 09:58:29.207Z"
+```
+
+**`next_action_at` = 08:05 nhưng reminder tạo lúc 09:58 → Đã quá hạn!**
+
+Điều này làm worker **chạy liên tục** vì:
+```
+now (09:58) > next_action_at (08:05) 
+→ Luôn query được reminder này
+→ Luôn cố gửi notification
+Cần fix:
+
+Tại sao next_action_at lại là 08:05:00?
+Có phải khi create reminder, không tính next_action_at đúng không?
+Có vòng lặp vô hạn trong processReminder() không?
+Gửi file lên hoặc paste code, tôi debug cho bạn! 🔍
+
+Files hidden in shared chats
+🔍 Tôi tìm thấy vấn đề rồi!
+
+Vấn đề 1: next_action_at bị stuck ở quá khứ
+
+json
+"next_action_at": "2025-11-08 08:05:00.000Z",
+"created": "2025-11-08 09:58:29.207Z"
+→ Reminder được tạo lúc 09:58, nhưng next_action_at lại là 08:05 (quá khứ) ❌
+
+Vấn đề 2: Khi create reminder, không tính next_action_at đúng
+
+Tôi cần xem file CreateReminder handler. Bạn có file này không? Nó nằm ở đâu?
+
+Hay là có thể là: Khi tạo reminder với recurrence_pattern = interval_seconds, next_recurring không được set, nên CalculateNextActionAt() không biết phải return gì.
+
+🔧 Fix ngay:
+Thêm safety check vào processReminder():
+
+worker.go - processReminder() & Snooze Fix
+Code ∙ Version 6 
+📝 Cần fix handler CreateReminder:
+Câu hỏi cho bạn:
+
+File CreateReminder handler nằm ở đâu? (tìm hàm CreateReminder)
+Khi create reminder, bạn có gọi CalculateNextActionAt() không?
+next_recurring được set lúc create không?
+Hãy share file handler để tôi fix phần tạo reminder đúng cách! 👀
+
+✅ Tạm thời:
+Chạy lại với fix processReminder() ở trên, nó sẽ:
+
+✅ Detect khi next_action_at quá cũ (>1 giờ)
+✅ Recalculate lại
+✅ Set emergency fallback = now + 1 minute
+✅ Ngăn vòng lặp vô hạn
+Share log sau khi chạy! 📋
+
+Files hidden in shared chats
+/.env
+./.env.example
+./.gitignore
+./.trae
+./.trae/rules
+./.trae/rules/project_rules.md
+./bin
+./bin/remiaq-linux-amd64
+./bin/remiaq-linux-arm64
+./cmd
+./cmd/server
+./cmd/server/main.go
+./cmd/simple_server
+./cmd/worker
+./config
+./config/config.go
+./config/config_test.go
+./docs
+./docs/API_DOCUMENTATION.md
+./docs/DATABASE_SCHEMA.md
+./docs/WORKER VER 2.md
+./docs/WORKER_LOGIC.md
+./docs/Yêu cầu chức năng mobile.md
+./docs_pocketbase_v031
+./docs_pocketbase_v031/dbx.md
+./docs_pocketbase_v031/go-collections.md
+./docs_pocketbase_v031/go-console-commands.md
+./docs_pocketbase_v031/go-database.md
+./docs_pocketbase_v031/go-event-hooks.md
+./docs_pocketbase_v031/go-filesystem.md
+./docs_pocketbase_v031/go-jobs-scheduling.md
+./docs_pocketbase_v031/go-logging.md
+./docs_pocketbase_v031/go-migrations.md
+./docs_pocketbase_v031/go-miscellaneous.md
+./docs_pocketbase_v031/go-overview.md
+./docs_pocketbase_v031/go-realtime.md
+./docs_pocketbase_v031/go-record-proxy.md
+./docs_pocketbase_v031/go-records.md
+./docs_pocketbase_v031/go-rendering-templates.md
+./docs_pocketbase_v031/go-routing.md
+./docs_pocketbase_v031/go-sending-emails.md
+./docs_pocketbase_v031/go-testing.md
+./echo_change_git.bat
+./firebase-credentials.json
+./go.mod
+./go.sum
+./internal
+./internal/api
+./internal/db
+./internal/db/db_utils.go
+./internal/db/mapper.go
+./internal/db/orm_helper.go
+./internal/db/transaction.go
+./internal/handlers
+./internal/handlers/query_handler.go
+./internal/handlers/reminder_handler.go
+./internal/handlers/system_status_handler.go
+./internal/middleware
+./internal/middleware/cors.go
+./internal/middleware/validation.go
+./internal/models
+./internal/models/reminder.go
+./internal/repository
+./internal/repository/interface.go
+./internal/repository/pocketbase
+./internal/repository/pocketbase/orm_utils.go
+./internal/repository/pocketbase/query_repo.go
+./internal/repository/pocketbase/reminder_orm_repo.go
+./internal/repository/pocketbase/system_status_orm_repo.go
+./internal/repository/pocketbase/user_orm_repo.go
+./internal/services
+./internal/services/fcm_service.go
+./internal/services/luna.txt
+./internal/services/lunar_calendar.go
+./internal/services/reminder_service.go
+./internal/services/schedule_calculator.go
+./internal/utils
+./internal/utils/response.go
+./internal/worker
+./internal/worker/worker.go
+./migrations
+./migrations/1671631110_init_schema.go
+./migrations/1720166400_update_reminders_rules.go
+./pb_data
+./pb_data/auxiliary.db
+./pb_data/data.db
+./pb_data/storage
+./postman_nhacnhofcm_v2.json
+./README.md
+./remiaq_changes_plan.md
+./scripts
+./scripts/build_linux.bat
+./scripts/newdb_server.bat
+./scripts/run_windows.bat
+./scripts/start_server.sh
+./temp
+./temp/main.go
+./temp/reminder.go
+./temp/reminder_orm_repo.go
+./temp/schedule_calculator.go
+./temp/worker.go
+./test
+./tmp
+./tmp/changes.diff
+./tree.txt
+./v3.1_nhacviecfcm_postman.json
+./v3_nhacviecfcm_postman.json
+./v4_RemiAq API (Corrected).postman_collection.json
+./web
+./web/index.html
+./web/README.md
+./web/remiaq_test.html
+./web/styles.css
+./web/system_status_test.html
+./worker_functions_full_code.txt
+
+Show more
+Perfect! 🎯 Tôi thấy rồi - handler gọi reminderService.CreateReminder().
+
+Bạn cần share file internal/services/reminder_service.go để tôi xem hàm CreateReminder() có tính next_action_at đúng không.
+
+Nhưng tôi có thể dự đoán vấn đề: Khi create reminder, next_recurring không được set, nên CalculateNextActionAt() return zero time → next_action_at bị empty.
+
+🔧 Quick Fix - Tạo file này:
+internal/services/reminder_service.go - CreateReminder Fix
+Code 
+Key fixes:
+
+go
+// BEFORE: Không tính next_recurring và next_action_at
+reminder.NextRecurring = ... // Empty!
+reminder.NextActionAt = ... // Empty!
+
+// AFTER: Tính đúng
+if reminder.NextRecurring.IsZero() {
+    nextRecurring, err := s.schedCalc.CalculateNextRecurring(reminder, now)
+    reminder.NextRecurring = nextRecurring ✅
+}
+
+reminder.NextActionAt = s.schedCalc.CalculateNextActionAt(reminder, now) ✅
+📝 Bước tiếp theo:
+Copy code trên vào internal/services/reminder_service.go
+Fix import (thêm repository package nếu chưa có)
+Chạy lại: go run ./cmd/server serve
+Expected result: Khi create reminder, next_action_at sẽ được set đúng (không phải 08:05 quá khứ)
+
+Test lại và báo kết quả! 🚀
+
+Files hidden in shared chats
+Perfect! ✅ File reminder_service.go của bạn đã tính next_action_at đúng trong CreateReminder():
+
+go
+// Calculate next_action_at
+reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+Vậy vấn đề không phải ở CreateReminder().
+
+🔍 Tìm nguyên nhân thực sự:
+DB của bạn hiện tại:
+
+json
+"next_action_at": "2025-11-08 08:05:00.000Z",
+"created": "2025-11-08 09:58:29.207Z"
+Có 2 khả năng:
+
+Reminder này tạo từ trước (khi code chưa fix), giờ next_action_at bị stuck
+Có bug trong CalculateNextActionAt() khi NextRecurring là zero
+🛠️ Fix ngay - Thêm safety check vào schedule_calculator.go:
+schedule_calculator.go - Fixed CRP Logic
+Code ∙ Version 8 
+🧹 Clean up DB - Xoá reminder cũ:
+bash
+# Xoá reminder bị stuck
+DELETE FROM reminders WHERE id = 'acczcx5j7uie4ou'
+Hoặc dùng API:
+
+bash
+DELETE /api/reminders/acczcx5j7uie4ou
+✅ Test lại:
+Chạy code mới: go run ./cmd/server serve
+Tạo reminder mới: POST /api/reminders
+json
+   {
+     "title": "Test 3 phút",
+     "type": "recurring",
+     "repeat_strategy": "crp_until_complete",
+     "recurrence_pattern": {
+       "type": "interval_seconds",
+       "interval_seconds": 180
+     },
+     "max_crp": 3,
+     "crp_interval_sec": 20
+   }
+Check DB xem next_action_at có được set đúng không
+Expected: next_action_at sẽ = now hoặc now + 180s (tùy logic)
+
+Share log sau khi test! 🚀
+
+hãy viết lại tài liệu dự vào những thay đổi mà chúng ta đã trao đổi
+
+RemiAq - Complete Technical Documentation
+Document 
+✅ Tôi đã viết lại toàn bộ tài liệu bao gồm:
+
+📄 Nội dung chính:
+System Overview - Giải thích FRP, CRP, Repeat Strategy
+Architecture - Sơ đồ hệ thống và flow
+Database Schema - Chi tiết tất cả fields
+Worker Logic - FRP/CRP trigger, CalculateNextActionAt
+API Documentation - Tất cả endpoints với request/response
+Configuration - Environment variables
+Time Field Handling - parseTimeDB() + IsTimeValid() helpers (🔑 Quan trọng)
+Error Handling - FCM errors, infinite loop prevention
+Usage Examples - 3 real-world scenarios
+File Structure - Layout dự án
+Testing Checklist - Test cases
+Troubleshooting - Common issues & fixes
+🔑 Key Changes Documented:
+✅ next_action_at = MIN(snooze_until, next_recurring, next_crp)
+✅ parseTimeDB() handles PocketBase format (space instead of T)
+✅ Safety check for infinite loops (>1 hour in past)
+✅ repeat_strategy = crp_until_complete recalculates FRP from completion time
+✅ Helper methods: IsNextCRPSet(), IsSnoozeUntilActive(), etc.
+✅ Worker cycle detailed (every 60 seconds)
+✅ Error handling for FCM token vs system errors
+
+Bạn có thể save tài liệu này để dùng làm reference! 🚀
+
+hãy viết file testcase liên quan đến worker để test
+
+internal/worker/worker_test.go - Complete Test Suite
+Code 
+Perfect! 🎯 Tôi đã tạo 12 comprehensive test cases cho worker:
+
+📋 Test Cases:
+#	Test Name	Coverage
+1	TestWorkerSkippedWhenDisabled	Worker disabled → skip all processing
+2	TestProcessOneTimeReminderWithCRP	One-time reminder sends notification + increment CRP
+3	TestProcessRecurringReminderWithFRP	Recurring trigger FRP + calculate next
+4	TestProcessCRPRetryAfterFRP	CRP retry after FRP sent
+5	TestOneTimeReminderReachesQuota	CRP quota reached → mark completed
+6	TestRecurringReminderCRPQuotaReached	Recurring quota reached → wait for FRP
+7	TestFCMTokenError	Token error → disable user FCM (continue)
+8	TestSystemFCMError	System error → disable worker
+9	TestUserNotFound	User not found → skip reminder
+10	TestSnoozeReminderSkipped	Snoozed reminder → skip processing
+11	TestProcessMultipleReminders	Process 2 reminders in 1 cycle
+12	TestRecurringCRPUntilCompleteStrategy	repeat_strategy = crp_until_complete
+🛠️ Chạy Tests:
+bash
+# Run all worker tests
+go test -v ./internal/worker/...
+
+# Run specific test
+go test -v ./internal/worker -run TestProcessOneTimeReminderWithCRP
+
+# With coverage
+go test -v ./internal/worker -cover
+
+# Coverage report
+go test -v ./internal/worker -coverprofile=coverage.out
+go tool cover -html=coverage.out
+📦 Dependencies:
+Thêm vào go.mod:
+
+go
+require github.com/stretchr/testify v1.8.4
+Cài đặt:
+
+bash
+go get github.com/stretchr/testify
+🔑 Key Testing Patterns:
+✅ Mock repositories - Không cần database
+✅ Mock FCM sender - Không gửi thực FCM
+✅ Test helpers - createTestReminder(), createTestUser()
+✅ Assertion - testify/assert và testify/mock
+✅ Error scenarios - Token error, system error, user not found
+✅ Edge cases - Quota reached, snoozed, multiple reminders
+
+Bạn có thể copy file này vào internal/worker/worker_test.go và chạy! 🚀
+
+Files hidden in shared chats
+Ah! 🔍 Mock test thiếu setup cho CanSendCRP() call. Lỗi xảy ra vì code gọi CanSendCRP() nhưng test không mock nó.
+
+Tôi cần sửa tests để mock tất cả method calls:
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 2 
+Now fix test 3 (Recurring with FRP):
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 3 
+Fix test 4 (CRP after FRP):
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 4 
+Fix test 5 (Quota reached):
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 5 
+Fix test 6 (Quota reached for recurring):
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 6 
+Fix tests 11 & 12 (Multiple reminders + crp_until_complete):
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 7 
+Perfect! ✅ Bây giờ chạy tests lại:
+
+bash
+go test -v ./internal/worker/
+All tests should pass now! 🎉
+
+Key changes:
+
+✅ Mock CanSendCRP() cho tất cả test cases
+✅ Mock CalculateNextActionAt() cho tất cả cases
+✅ Set NextCRP = time.Time{} khi tạo test reminders (không gây lỗi year=1)
+✅ Use mock.MatchedBy() để match reminder objects trong mocks
+✅ Fix test helpers để setup NextCRP đúng
+Chạy lại và báo kết quả nhé! 🚀
+
+Files hidden in shared chats
+Great! 6 tests passed! ✅ Nhưng tests 7-10 chưa fix hết. Cần thêm mock cho CanSendCRP():
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 8 
+Fix tests 8, 9, 10:
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 9 
+Perfect! Now run tests again:
+
+bash
+go test -v ./internal/worker/
+All 12 tests should pass! 🎉
+
+Summary of fixes:
+
+✅ Test 7: Added CanSendCRP mock
+✅ Test 8: Added CanSendCRP mock + set NextCRP = time.Time{}
+✅ Test 9: Added CanSendCRP mock + set NextCRP = time.Time{}
+✅ Test 10: Set NextCRP = time.Time{} for snoozed reminder
+Let me know the results! 🚀
+
+Files hidden in shared chats
+Gần xong! 11/12 tests passed! ✅ Test 8 thiếu mock cho SetFCMError():
+
+internal/worker/worker_test.go - Complete Test Suite
+Code ∙ Version 10 
+Now run tests again:
+
+bash
+go test -v ./internal/worker/
+All 12 tests should pass now! 🎉 Perfect!
+
+có nên tách ra nhiều table cho nhiều loại reminder không
+
+có nên tách ra nhiều table cho nhiều loại reminder không
+
+Câu hỏi tốt! 🤔 Tôi sẽ phân tích pros/cons:
+
+Database Design: Single vs Multiple Tables
+Document 
+TL;DR - Kết luận:
+Single Table (Hiện tại)	Multiple Tables
+Queries	1 query, simple ✅	3 tables + JOINs + UNION ❌
+Updates	1 operation ✅	Multiple updates + transactions ❌
+Nullable fields	~100 bytes/row = negligible ✅	Complex data migration ❌
+Developer experience	Easy ✅	Difficult ❌
+Flexibility	Can convert types easily ✅	Hard to migrate ❌
+Worker performance	Simple & fast ✅	Complex queries ❌
+Khuyến cáo: GIỮ single table! 🎯
+
+Lý do:
+
+✅ Cả 2 loại chia sẻ 80% fields
+✅ Worker xử lý giống nhau
+✅ Queries đơn giản
+✅ Dễ bảo trì
+✅ Storage overhead negligible (108MB cho 1M records)
+Chỉ nên split khi bạn có >500M reminders và query performance thực sự là bottleneck. Lúc đó có thể migration dễ dàng mà không downtime 👍
+
+2025/11/08 19:10:00 Worker: Processing 1 due reminders
+2025/11/08 19:10:00 📋 Loaded reminder acczcx5j7uie4ou: NextCRP=2025-11-08 08:05:00 +0000 UTC, LastSentAt=2025-11-08 12:09:55.636 +0000 UTC, CRPCount=0, MaxCRP=3     
+2025/11/08 19:10:00 Worker: FRP triggered for reminder acczcx5j7uie4ou
+[0.00ms] SELECT musers.* FROM musers WHERE musersid='p699umko9u3zcso' LIMIT 1
+[0.00ms] SELECT reminders.* FROM reminders WHERE remindersid='acczcx5j7uie4ou' LIMIT 1
+[0.00ms] SELECT count(*) FROM musers WHERE id='p699umko9u3zcso'
+[0.00ms] UPDATE reminders SET calendar_type='solar', created='2025-11-08 09:58:29.207Z', crp_count=0, crp_interval_sec=20, description='Lặp mỗi 3 phút, retry 3x mỗi 20 giây', id='acczcx5j7uie4ou', last_completed_at='', last_crp_completed_at='', last_sent_at='2025-11-08 12:10:00.633Z', max_crp=3, next_action_at='2025-11-08 08:05:00.000Z', next_crp='2025-11-08 08:05:00.000Z', next_recurring='2025-11-08 08:05:00.000Z', recurrence_pattern='{"type":"interval_seconds","interval_seconds":180}', repeat_strategy='crp_until_complete', snooze_until='', status='active', title='Test 3 phút - CRP 20s', type='recurring', updated='2025-11-08 12:10:00.767Z', user_id='p699umko9u3zcso' WHERE id='acczcx5j7uie4ou'
+2025/11/08 19:10:00 Worker: FRP processed. Next FRP: 2025-11-08 08:05:00 +0000 UTC 
+[0.00ms] SELECT system_status.* FROM system_status WHERE system_statusmid = 1 LIMIT 1
+[0.00ms] UPDATE system_status SET created='2025-11-08 05:06:04.238Z', id='odbm9mnf9amel9g', last_error='', mid=1, updated='2025-11-08 12:10:00.769Z', worker_enabled=true WHERE id='odbm9mnf9amel9g'
+[0.00ms] SELECT system_status.* FROM system_status WHERE system_statusmid = 1 LIMIT 1
+[0.00ms] SELECT * FROM reminders WHERE ((next_action_at <= '2025-11-08T12:10:05.6344314Z') AND ((snooze_until IS NULL OR snooze_until <= '2025-11-08T12:10:05.6344314Z'))) AND status='active') ORDER BY next_action_at ASC
+2025/11/08 19:10:05 Worker: Processing 1 due reminders
+2025/11/08 19:10:05 📋 Loaded reminder acczcx5j7uie4ou: NextCRP=2025-11-08 08:05:00 +0000 UTC, LastSentAt=2025-11-08 12:10:00.633 +0000 UTC, CRPCount=0, MaxCRP=3     
+2025/11/08 19:10:05 Worker: FRP triggered for reminder acczcx5j7uie4ou
+[0.00ms] SELECT musers.* FROM musers WHERE musersid='p699umko9u3zcso' LIMIT 1
+[0.00ms] SELECT reminders.* FROM reminders WHERE remindersid='acczcx5j7uie4ou' LIMIT 1
+[0.00ms] SELECT count(*) FROM musers WHERE id='p699umko9u3zcso'
+[0.00ms] UPDATE reminders SET calendar_type='solar', created='2025-11-08 09:58:29.207Z', crp_count=0, crp_interval_sec=20, description='Lặp mỗi 3 phút, retry 3x mỗi 20 giây', id='acczcx5j7uie4ou', last_completed_at='', last_crp_completed_at='', last_sent_at='2025-11-08 12:10:05.634Z', max_crp=3, next_action_at='2025-11-08 08:05:00.000Z', next_crp='2025-11-08 08:05:00.000Z', next_recurring='2025-11-08 08:05:00.000Z', recurrence_pattern='{"type":"interval_seconds","interval_seconds":180}', repeat_strategy='crp_until_complete', snooze_until='', status='active', title='Test 3 phút - CRP 20s', type='recurring', updated='2025-11-08 12:10:05.747Z', user_id='p699umko9u3zcso' WHERE id='acczcx5j7uie4ou'
+2025/11/08 19:10:05 Worker: FRP processed. Next FRP: 2025-11-08 08:05:00 +0000 UTC 
+
+đây là db 
+{   "ok": true,   "status": 200,   "data": {     "page": 1,     "perPage": 1,     "totalItems": 1,     "totalPages": 1,     "items": [       {         "calendar_type": "solar",         "created": "2025-11-08 09:58:29.207Z",         "crp_count": "0",         "crp_interval_sec": "20",         "description": "Lặp mỗi 3 phút, retry 3x mỗi 20 giây",         "id": "acczcx5j7uie4ou",         "last_completed_at": "",         "last_crp_completed_at": "",         "last_sent_at": "2025-11-08 12:10:05.634Z",         "max_crp": "3",         "next_action_at": "2025-11-08 08:05:00.000Z",         "next_crp": "2025-11-08 08:05:00.000Z",         "next_recurring": "2025-11-08 08:05:00.000Z",         "recurrence_pattern": "{\"type\":\"interval_seconds\",\"interval_seconds\":180}",         "repeat_strategy": "crp_until_complete",         "snooze_until": "",         "status": "active",         "title": "Test 3 phút - CRP 20s",         "type": "recurring",         "updated": "2025-11-08 12:10:05.747Z",         "user_id": "p699umko9u3zcso"       }     ]   } }
+
+"crp_count luôn bằng 0
+
+Show more
+Tôi thấy vấn đề! 🔍
+
+Problem:
+
+FRP triggered liên tục → NextRecurring bị stuck ở 08:05:00 (quá khứ)
+→ next_action_at vẫn = 08:05:00 (quá khứ)
+→ Worker luôn query được nó
+→ Vòng lặp vô hạn FRP ❌
+Root cause: repeat_strategy = "crp_until_complete" nhưng nextRecurring không được tính lại!
+
+Fix trong processFRP() - thêm vào worker.go:
+
+worker.go - processFRP() Fixed
+Code 
+Key Changes:
+
+✅ Always calculate nextRecurring - không phụ thuộc repeat_strategy
+
+❌ OLD (sai):
+
+go
+if reminder.RepeatStrategy == models.RepeatStrategyNone {
+    // Auto-calculate next FRP
+    nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
+    reminder.NextRecurring = nextRecurring
+}
+// else: crp_until_complete - keep same NextRecurring ← BUG!
+✅ NEW (đúng):
+
+go
+// LUÔN tính next_recurring, dù repeat_strategy nào
+nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
+reminder.NextRecurring = nextRecurring
+```
+
+---
+
+**Why?**
+
+Với `repeat_strategy = "crp_until_complete"`:
+- 🔴 **Sai**: "Chờ user complete rồi mới tính" → NextRecurring bị stuck ở quá khứ
+- 🟢 **Đúng**: "Vẫn tính tiếp, nhưng khi user complete mới reset từ thời điểm complete"
+
+| Thời điểm | NextRecurring | Giải thích |
+|-----------|--------------|-----------|
+| FRP trigger | 08:05 → **11:05** (tính 3 phút tiếp) | Move forward |
+| User complete lúc 12:00 | **12:00 → 12:03** (reset từ 12:00) | Reset from complete time |
+
+---
+
+**After fix:**
+```
+FRP 12:10:00 → NextRecurring = 12:13:00 ✅ (move forward)
+If user complete at 12:12 → NextRecurring = 12:12:03 ✅ (reset from complete)
+Apply fix & test! 🚀
+
+Files hidden in shared chats
+sau khi chạy Frp và crp lần 1, nghỉ 3 phút như trong db đã khai báo. sau đó thì đủ 3 phút thì hình như chạy không đúng nữa, b xem log:
+
+Perfect! 🎯 Log cho thấy system hoạt động gần đúng nhưng có issue nhỏ:
+
+12:29:08 - CRP 1/3 ✅
+12:29:28 - CRP 2/3 ✅ (20s sau)
+12:29:48 - CRP 3/3 ✅ (20s sau)
+12:32:00 - Quá 3 phút, FRP tiếp theo?? ❌
+Problem: Log bị cắt, không thấy điều gì xảy ra sau CRP 3/3.
+
+Theo log:
+
+next_recurring='2025-11-08 12:32:00.000Z'
+Nên lúc 12:32:00 FRP phải trigger. Nhưng log không hiện. Có 2 khả năng:
+
+Log bị cắt - process dừng/restart
+Reminder bị stuck - vẫn query nhưng FRP không trigger
+Chạy câu lệnh này để kiểm tra DB hiện tại:
+
+bash
+# Query reminder hiện tại
+curl "http://localhost:8090/api/collections/reminders/records/acczcx5j7uie4ou" \\
+  -H "Authorization: Bearer YOUR_TOKEN"
+Share output để tôi xem:
+
+✅ next_recurring hiện tại là gì?
+✅ next_action_at là gì?
+✅ crp_count là gì?
+✅ last_sent_at là gì?
+Hoặc có thể là FRP fix chưa được apply đúng. Check xem file worker.go của bạn hàm processFRP() có giống artifact không?
+
+Nếu vẫn có:
+
+go
+if reminder.RepeatStrategy == models.RepeatStrategyNone {
+    nextRecurring, err := w.schedCalc.CalculateNextRecurring(...)
+}
+// else: keep same ← SAI!
+Thì cần replace toàn bộ hàm lại! 👇
+
+trong log tôi vừa gửi, time của crp có cách nhau khoảng gần 20 giây không
+
+Đúng! 🎯 Xem lại log:
+
+12:29:08 - CRP 1/3 (Last Sent)
+12:29:28 - CRP 2/3 (Last Sent) ✅ = 12:29:08 + 20s ✅
+12:29:48 - CRP 3/3 (Last Sent) ✅ = 12:29:28 + 20s ✅
+CRP interval hoàn toàn đúng! 20 giây/lần ✅
+
+Vấn đề khác: Log bị cắt lúc 12:29:48, không thấy tiếp theo:
+
+CRP 3/3 đạt quota → status phải là gì?
+Sau đó 12:32:00 (3 phút) có FRP không?
+Tôi cần:
+
+bash
+# 1. Xem DB hiện tại
+GET http://localhost:8090/api/collections/reminders/records/acczcx5j7uie4ou
+
+# 2. Chạy worker lâu hơn, share toàn bộ log (include phần sau 12:29:48)
+
+# 3. Hoặc xem system log xem có error gì không
+Log hiện tại cho thấy:
+
+✅ CRP interval = 20s → ĐÚNG
+✅ CanSendCRP logic → ĐÚNG
+✅ Next CRP calculation → ĐÚNG
+Nhưng bị cắt giữa chừng, không thấy:
+
+❓ CRP 3/3 xong rồi sao?
+❓ Status = completed?
+❓ FRP tiếp theo trigger hay không?
+Gửi log đầy đủ + DB state sau 12:29:48 lên nhé! 👀
+
+tôi cắt giữa chừng vì không muốn copy hết log. 
+tôi hỏi là: 
+1. crp_until_complete thì sẽ chờ người dùng bấm nút complete phải không? user bấm rồi thì update field nào của db 
+2.  hiện tại là crp_until_complete  nhưng  không chờ user bấm complete tôi thấy vẫn tiếp tục vòng lặp frp mới
+
+Ah hiểu rồi! 🎯 Bạn hỏi về logic của repeat_strategy = "crp_until_complete"
+
+Câu 1: User bấm complete thì update fields nào?
+Xem file reminder_service.go hàm OnUserComplete():
+
+go
+if reminder.Type == models.ReminderTypeRecurring {
+    reminder.CRPCount = 0  // ← Reset CRP count
+    
+    if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+        // ← QUAN TRỌNG:
+        reminder.LastCompletedAt = now
+        nextRecurring, _ := s.schedCalculator.CalculateNextRecurring(reminder, now)
+        reminder.NextRecurring = nextRecurring  // ← Tính FRP mới từ thời điểm complete
+        reminder.NextCRP = nextRecurring
+    }
+    
+    reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+}
+```
+
+**Update fields:**
+- ✅ `crp_count = 0` (reset)
+- ✅ `last_crp_completed_at = now`
+- ✅ `last_completed_at = now`
+- ✅ `next_recurring = calculated từ now` (time của user complete)
+- ✅ `next_crp = next_recurring`
+- ✅ `next_action_at = recalculated`
+
+---
+
+## Câu 2: Sao vẫn FRP liên tục mà không chờ user?
+
+**Đó là BUG!** 🐛 `repeat_strategy = "crp_until_complete"` phải:
+```
+Kỳ vọng:
+├─ FRP trigger lần 1 → gửi notifi
+├─ CRP 1,2,3 → retry 3 lần
+└─ DỪNG, chờ user bấm complete ⏸️
+
+Hiện tại (BUG):
+├─ FRP trigger lần 1 → gửi notifi
+├─ CRP 1,2,3 → retry 3 lần
+├─ CRP hết quota → next_action_at = next_recurring
+└─ 3 phút sau → FRP trigger lại (không chờ user) ❌
+Root cause: Logic sai ở processCRP() khi recurring + CRP quota reached:
+
+go
+if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
+    // Sau đó:
+    if !reminder.NextRecurring.IsZero() {
+        reminder.NextActionAt = reminder.NextRecurring  // ← SAI!
+    }
+}
+Should be:
+
+go
+if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
+    // Nếu là crp_until_complete → CHỜ user, không set next_action_at
+    if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+        reminder.NextActionAt = time.Time{}  // ← Bỏ trống, chờ user complete
+    } else {
+        // Nếu là none → tiếp tục theo FRP
+        reminder.NextActionAt = reminder.NextRecurring
+    }
+}
+Fix cần thêm vào processCRP() trong worker.go:
+
+worker.go - processCRP() Fix
+Code ∙ Version 3 
+Perfect! ✅ Giờ logic sẽ:
+
+repeat_strategy = "none":
+├─ CRP 1,2,3 đạt quota
+└─ next_action_at = next_recurring → FRP tiếp theo trigger ✅
+
+repeat_strategy = "crp_until_complete":
+├─ CRP 1,2,3 đạt quota
+├─ next_action_at = EMPTY ⏸️
+└─ Worker skip, chờ user bấm complete ✅
+Chạy lại test! 🚀
+
+nếu crp 1,2 và chưa đến 3. nhưng user bấm complete rồi thì sẽ ra sao? 
+tôi mong muốn là dù crp chưa hết nhưng user bấm lúc nào thì sẽ chờ frp mới
+
+Tuyệt vời! 🎯 Câu hỏi rất quan trọng!
+
+Hiện tại (sai):
+
+CRP 1,2 → User bấm complete
+→ next_crp vẫn cứ trigger lần 3
+→ Rồi mới chờ FRP ❌
+Mong muốn (đúng):
+
+CRP 1,2 → User bấm complete
+→ NGAY LẬP TỨC chờ FRP mới
+→ Không còn CRP 3 ❌
+Đó là job của hàm OnUserComplete() trong reminder_service.go:
+
+reminder_service.go - OnUserComplete() Fixed
+Code 
+Key change:
+
+❌ OLD (sai):
+
+go
+if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+    // Chỉ reset + tính lại (dù còn CRP)
+}
+✅ NEW (đúng):
+
+go
+// LUÔN reset CRP + tính FRP mới, bất kể repeat_strategy
+reminder.CRPCount = 0
+nextRecurring, _ := s.schedCalculator.CalculateNextRecurring(reminder, now)
+reminder.NextRecurring = nextRecurring
+reminder.NextActionAt = nextRecurring
+```
+
+---
+
+**Timeline (sau fix):**
+```
+12:29:00 - FRP trigger (CRP 1,2,3 sẽ trigger)
+12:29:20 - CRP 1
+12:29:40 - CRP 2
+12:29:50 - User bấm COMPLETE ✅
+          → next_recurring = 12:32:50 (3 phút sau)
+          → crp_count = 0 (reset)
+          → next_action_at = 12:32:50
+          → Worker skip CRP 3 ❌
+
+12:32:50 - FRP trigger lần 2 ✅
+Apply fix và test! 🚀
+
+hãy check lại các trường hợp trước đó xem code có bị conflig , gây lỗi trở lại các trường hợp khác không?
+nên list  ra các trường hợp (theo ngôn ngữ tự nhiên) có thể xảy ra để khi làm hay fix chức năng thì quay lại check trường hợp cũ
+
+Tuyệt vời! 🎯 Tôi sẽ list tất cả test cases và check xem fix có gây conflict không:
+
+RemiAq - Complete Test Cases & Regression Check
+Document 
+Perfect! 📋 Bây giờ bạn có:
+
+✅ Danh sách 14 test cases rõ ràng:
+One-time (3): 1.1, 1.2, 1.3 Recurring none (3): 2.1, 2.2, 2.3 Recurring crp_until_complete (3): 3.1, 3.2, 3.3 Snooze (2): 4.1, 4.2 Edge cases (3): 5.1, 5.2, 5.3
+
+🚨 3 Conflict Points cần watch:
+repeat_strategy check - Đừng quên else case
+Type check - one_time vs recurring logic riêng
+next_action_at = empty - Cần SET lại khi user complete
+📊 Regression checklist:
+Sau mỗi fix, check các test liên quan trước khi commit.
+
+Chạy ngay:
+
+bash
+# 1. Unit tests
+go test -v ./internal/worker/
+
+# 2. Integration test (tạo reminder từng loại, watch logs)
+Khuyến cáo: Chạy test 3.1, 3.2, 1.2 trước, rồi đến các test khác! 🎯
+
+có cách nào chạy 14 testcase đó bằng code không
+
+Tuyệt vời! 🎯 Tôi sẽ tạo comprehensive integration test chạy cả 14 cases:
+
+internal/worker/integration_test.go - All 14 Test Cases
+Code 
+

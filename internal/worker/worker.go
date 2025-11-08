@@ -209,6 +209,7 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 }
 
 // processFRP handles Father Recurrence Pattern trigger
+
 func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
 	log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
 
@@ -222,17 +223,22 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 	reminder.CRPCount = 0
 	reminder.NextCRP = reminder.NextRecurring
 
-	// Calculate next FRP
-	if reminder.RepeatStrategy == models.RepeatStrategyNone {
-		// Auto-calculate next FRP
-		nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
-		if err != nil {
-			log.Printf("Worker: Warning - failed to calc next FRP for %s: %v", reminder.ID, err)
-			nextRecurring = now.Add(24 * time.Hour)
-		}
-		reminder.NextRecurring = nextRecurring
+	// ========================================
+	// CRITICAL FIX: Calculate next FRP
+	// ========================================
+	// For repeat_strategy = "crp_until_complete":
+	// NextRecurring should STILL be recalculated!
+	// Only the timing basis changes (waits for user complete)
+	// But we need to move it forward from current position
+
+	nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
+	if err != nil {
+		log.Printf("Worker: Warning - failed to calc next FRP for %s: %v", reminder.ID, err)
+		nextRecurring = now.Add(24 * time.Hour)
 	}
-	// else: crp_until_complete - keep same NextRecurring until user completes
+	reminder.NextRecurring = nextRecurring
+	log.Printf("📅 Calculated NextRecurring: %s (from now: %s)",
+		nextRecurring.Format("15:04:05"), now.Format("15:04:05"))
 
 	// Recalc next_action_at
 	reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
@@ -242,7 +248,7 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 		return fmt.Errorf("failed to update reminder after FRP: %w", err)
 	}
 
-	log.Printf("Worker: FRP processed. Next FRP: %s", reminder.NextRecurring)
+	log.Printf("Worker: FRP processed. Next FRP: %s", reminder.NextRecurring.Format("15:04:05"))
 	return nil
 }
 
@@ -274,7 +280,7 @@ func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now 
 			// Still has quota, recalc next_action_at
 			reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
 		}
-	} else if reminder.Type == models.ReminderTypeRecurring {
+	} else if reminder.Type == models.ReminderTypeRecurring { // chờ user bấm complete FRP mới được post tiếp
 		// Recurring: Check if reached CRP quota
 		if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
 			log.Printf("⏸️  Worker: Recurring reminder CRP quota reached (%d/%d), waiting for FRP", reminder.CRPCount, reminder.MaxCRP)

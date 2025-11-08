@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"remiaq/internal/models"
@@ -164,7 +165,7 @@ func (s *ReminderService) SnoozeReminder(ctx context.Context, id string, duratio
 	return s.reminderRepo.Update(ctx, reminder)
 }
 
-// OnUserComplete handles user completing a reminder
+// OnUserComplete handles when user clicks "Complete"
 func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 	reminder, err := s.reminderRepo.GetByID(ctx, id)
 	if err != nil {
@@ -175,32 +176,51 @@ func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 	reminder.LastCRPCompletedAt = now
 
 	if reminder.Type == models.ReminderTypeOneTime {
-		// Mark as completed
+		// ========================================
+		// CASE 1: ONE-TIME REMINDER
+		// ========================================
+		log.Printf("✅ Completing one-time reminder %s", id)
+
 		reminder.Status = models.ReminderStatusCompleted
 		reminder.LastCompletedAt = now
-	} else if reminder.Type == models.ReminderTypeRecurring {
-		// Reset CRP for current cycle
 		reminder.CRPCount = 0
+		reminder.NextActionAt = time.Time{} // Clear next action
 
-		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
-			// Recalc next_recurring from now
-			nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
-			if err != nil {
-				// Log but don't fail
-				fmt.Printf("WARN: Failed to calc next_recurring on complete: %v\n", err)
-				nextRecurring = now.Add(24 * time.Hour)
-			}
-			reminder.NextRecurring = nextRecurring
-			reminder.NextCRP = nextRecurring
-		}
-
-		reminder.LastCompletedAt = now
+		return s.reminderRepo.Update(ctx, reminder)
 	}
 
-	// Recalc next_action_at
-	reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+	if reminder.Type == models.ReminderTypeRecurring {
+		// ========================================
+		// CASE 2: RECURRING REMINDER
+		// ========================================
+		log.Printf("✅ Completing CRP cycle for recurring reminder %s", id)
 
-	return s.reminderRepo.Update(ctx, reminder)
+		// ========================================
+		// CRITICAL FIX for crp_until_complete:
+		// User bấm complete bất kỳ lúc nào → ngay lập tức chờ FRP mới
+		// ========================================
+
+		// RESET CRP immediately (dù chưa đủ quota)
+		reminder.CRPCount = 0
+		reminder.LastCompletedAt = now
+
+		// Calculate NEXT FRP from completion time
+		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
+		if err != nil {
+			log.Printf("⚠️  Failed to calculate next recurring: %v", err)
+			nextRecurring = now.Add(24 * time.Hour) // Fallback
+		}
+
+		reminder.NextRecurring = nextRecurring
+		reminder.NextCRP = nextRecurring // Reset CRP to next FRP
+		reminder.NextActionAt = nextRecurring
+
+		log.Printf("📅 Next FRP calculated from completion: %s", nextRecurring.Format("2006-01-02 15:04:05"))
+
+		return s.reminderRepo.Update(ctx, reminder)
+	}
+
+	return fmt.Errorf("unknown reminder type: %s", reminder.Type)
 }
 
 // CompleteReminder marks a reminder as completed (legacy, delegates to OnUserComplete)
