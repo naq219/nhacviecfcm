@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"remiaq/internal/middleware"
@@ -62,9 +63,23 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 		return utils.SendError(re, 401, "Unauthorized", errors.New("user not authenticated"))
 	}
 
-	var reminder models.Reminder
-	if err := json.NewDecoder(re.Request.Body).Decode(&reminder); err != nil {
+	// First decode into a temporary struct that can handle for_test field
+	var tempReminder struct {
+		models.Reminder
+		ForTestSeconds int `json:"for_test"`
+	}
+
+	if err := json.NewDecoder(re.Request.Body).Decode(&tempReminder); err != nil {
 		return utils.SendError(re, 400, "Invalid request body", err)
+	}
+
+	// Process for_test field if present
+	reminder := tempReminder.Reminder
+	if tempReminder.ForTestSeconds > 0 {
+		// Set next_action_at to now + specified seconds
+		reminder.NextActionAt = time.Now().Add(time.Duration(tempReminder.ForTestSeconds) * time.Second).UTC()
+		log.Printf("NextActionAt: %v", reminder.NextActionAt)
+		log.Printf("now: %v", time.Now().UTC())
 	}
 
 	reminder.UserID = authRecord.Id

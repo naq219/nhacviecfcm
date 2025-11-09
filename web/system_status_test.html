@@ -6,31 +6,149 @@
   <title>Test System Status</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 24px; }
-    .card { border: 1px solid #ddd; padding: 16px; border-radius: 8px; max-width: 600px; }
+    .container { display: flex; gap: 24px; }
+    .left-panel { flex: 1; max-width: 600px; }
+    .right-panel { flex: 2; min-width: 800px; }
+    .card { border: 1px solid #ddd; padding: 16px; border-radius: 8px; }
     .row { margin: 8px 0; }
     label { display: inline-block; min-width: 140px; }
     input[type="text"] { width: 100%; padding: 8px; }
     button { padding: 8px 12px; margin-right: 8px; }
     pre { background: #f6f6f6; padding: 8px; border-radius: 6px; }
+    .worker-enabled-true { color: red; font-weight: bold; }
+    .worker-enabled-false { color: green; }
+    .reminders-grid { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+      gap: 12px; 
+      margin-top: 16px;
+    }
+    .reminder-card { 
+      border: 1px solid #eee; 
+      padding: 12px; 
+      border-radius: 6px; 
+      background: #fafafa; 
+      font-size: 13px;
+    }
   </style>
   <script>
     const API_BASE = 'http://127.0.0.1:8888';
+    let refreshInterval;
+
+    // Hàm hiển thị thời gian UTC
+    function updateUTCTime() {
+      const now = new Date();
+      const utcTime = now.toUTCString();
+      document.getElementById('utc_time').textContent = utcTime;
+    }
+
+    // Hàm tính toán và hiển thị thời gian lệch
+    function formatTimeDifference(targetTime) {
+      if (!targetTime) return 'N/A';
+      
+      const now = new Date();
+      const target = new Date(targetTime);
+      const diffMs = target - now;
+      const diffSeconds = Math.floor(diffMs / 1000);
+      const diffMinutes = Math.floor(diffSeconds / 60);
+      const diffHours = Math.floor(diffMinutes / 60);
+      const diffDays = Math.floor(diffHours / 24);
+      
+      // Format thời gian địa phương
+      const localTime = target.toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      
+      // Format thời gian lệch chi tiết (không làm tròn)
+      let diffText = '';
+      if (Math.abs(diffSeconds) < 60) {
+        diffText = `${Math.abs(diffSeconds)}s`;
+      } else if (Math.abs(diffMinutes) < 60) {
+        const remainingSeconds = Math.abs(diffSeconds) % 60;
+        diffText = remainingSeconds > 0 ? 
+          `${Math.abs(diffMinutes)}p${remainingSeconds}s` : 
+          `${Math.abs(diffMinutes)}p`;
+      } else if (Math.abs(diffHours) < 24) {
+        const remainingMinutes = Math.abs(diffMinutes) % 60;
+        diffText = remainingMinutes > 0 ? 
+          `${Math.abs(diffHours)}h${remainingMinutes}p` : 
+          `${Math.abs(diffHours)}h`;
+      } else {
+        const remainingHours = Math.abs(diffHours) % 24;
+        diffText = remainingHours > 0 ? 
+          `${Math.abs(diffDays)}d${remainingHours}h` : 
+          `${Math.abs(diffDays)}d`;
+      }
+      
+      const sign = diffMs >= 0 ? '+' : '-';
+      return `${localTime} ${sign}${diffText}`;
+    }
 
     async function fetchStatus() {
       try {
-        const res = await fetch(`${API_BASE}/api/system_status`);
-        const data = await res.json();
+        // Fetch system status
+        const statusRes = await fetch(`${API_BASE}/api/system_status`);
+        const statusData = await statusRes.json();
 
-        if (!data || !data.data) throw new Error('No data');
-        console.log(data);
+        if (!statusData || !statusData.data) throw new Error('No status data');
 
-        const s = data.data;
-        document.getElementById('worker_enabled').textContent = s.worker_enabled ? 'true' : 'false';
+        const s = statusData.data;
+        const workerEnabledElement = document.getElementById('worker_enabled');
+        workerEnabledElement.textContent = s.worker_enabled ? 'true' : 'false';
+        workerEnabledElement.className = s.worker_enabled ? 'worker-enabled-true' : 'worker-enabled-false';
         document.getElementById('last_error').textContent = s.last_error || '';
-        document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('raw').textContent = JSON.stringify(statusData, null, 2);
+
+        // Fetch reminders using rquery API
+        const remindersRes = await fetch(`${API_BASE}/api/rquery?q=select%20*%20from%20reminders`);
+        const remindersData = await remindersRes.json();
+        
+        if (remindersData && remindersData.items) {
+          displayReminders(remindersData.items);
+        }
       } catch (e) {
         document.getElementById('raw').textContent = `Fetch error: ${e?.message || e}`;
+        document.getElementById('reminders_list').innerHTML = `<p>Error loading reminders: ${e?.message || e}</p>`;
       }
+    }
+
+    // Hiển thị danh sách reminders
+    function displayReminders(reminders) {
+      const container = document.getElementById('reminders_list');
+      if (!reminders || reminders.length === 0) {
+        container.innerHTML = '<p>No reminders found</p>';
+        return;
+      }
+
+      let html = '<div style="margin-top: 20px; border-top: 2px solid #ccc; padding-top: 20px;">';
+      html += '<h3>Reminders List</h3>';
+      html += '<div style="max-height: 400px; overflow-y: auto;">';
+      
+      reminders.forEach(reminder => {
+        html += `
+          <div style="border: 1px solid #eee; padding: 12px; margin-bottom: 12px; border-radius: 6px; background: #fafafa;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
+              <div><strong>ID:</strong> ${reminder.id || 'N/A'}</div>
+              <div><strong>Title:</strong> ${reminder.title || 'N/A'}</div>
+              <div><strong>Type:</strong> ${reminder.type || 'N/A'}</div>
+              <div><strong>Calendar:</strong> ${reminder.calendar_type || 'N/A'}</div>
+              <div><strong>Recurrence:</strong> ${reminder.recurrence_pattern || 'N/A'}</div>
+              <div><strong>Strategy:</strong> ${reminder.repeat_strategy || 'N/A'}</div>
+              <div><strong>Next Recurring:</strong> ${formatTimeDifference(reminder.next_recurring)}</div>
+              <div><strong>Next CRP:</strong> ${formatTimeDifference(reminder.next_crp)}</div>
+              <div><strong>Next Action:</strong> ${formatTimeDifference(reminder.next_action_at)}</div>
+              <div><strong>Last Sent:</strong> ${formatTimeDifference(reminder.last_sent_at)}</div>
+              <div><strong>Last Completed:</strong> ${formatTimeDifference(reminder.last_completed_at)}</div>
+              <div><strong>Snooze Until:</strong> ${formatTimeDifference(reminder.snooze_until)}</div>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += '</div></div>';
+      container.innerHTML = html;
     }
 
     async function updateStatus(enable) {
@@ -67,26 +185,43 @@
       }
     }
 
-    window.addEventListener('DOMContentLoaded', fetchStatus);
+    // Khởi tạo và bắt đầu cập nhật thời gian mỗi giây
+    window.addEventListener('DOMContentLoaded', function() {
+      fetchStatus();
+      updateUTCTime(); // Hiển thị thời gian ngay lần đầu
+      refreshInterval = setInterval(updateUTCTime, 1000); // Cập nhật mỗi giây
+    });
   </script>
 </head>
 <body>
   <h1>System Status Test</h1>
-  <div class="card">
-    <div class="row"><label>worker_enabled:</label> <span id="worker_enabled">...</span></div>
-    <div class="row"><label>last_error:</label> <span id="last_error">...</span></div>
-    <div class="row">
-      <label for="error_input">Nhập last_error:</label>
-      <input id="error_input" type="text" placeholder="vd: testing error" />
+  <div class="container">
+    <div class="left-panel">
+      <div class="card">
+        <div class="row"><label>UTC Time:</label> <span style="font-weight: bold;" id="utc_time">...</span></div>
+        <div class="row"><label>worker_enabled:</label> <span id="worker_enabled">...</span></div>
+        <div class="row"><label>last_error:</label> <span id="last_error">...</span></div>
+        <div class="row">
+          <label for="error_input">Nhập last_error:</label>
+          <input id="error_input" type="text" placeholder="vd: testing error" />
+        </div>
+        <div class="row">
+          <button onclick="updateStatus(true)">Enable worker</button>
+          <button onclick="updateStatus(false)">Disable worker</button>
+          <button onclick="setErrorOnly()">Set only last_error</button>
+          <button onclick="fetchStatus()">Refresh</button>
+        </div>
+        <h3>Raw response</h3>
+        <pre id="raw"></pre>
+      </div>
     </div>
-    <div class="row">
-      <button onclick="updateStatus(true)">Enable worker</button>
-      <button onclick="updateStatus(false)">Disable worker</button>
-      <button onclick="setErrorOnly()">Set only last_error</button>
-      <button onclick="fetchStatus()">Refresh</button>
+    
+    <div class="right-panel">
+      <div class="card">
+        <h2>Reminders List</h2>
+        <div id="reminders_list"></div>
+      </div>
     </div>
-    <h3>Raw response</h3>
-    <pre id="raw"></pre>
   </div>
 </body>
 </html>

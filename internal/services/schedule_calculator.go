@@ -40,7 +40,7 @@ func (c *ScheduleCalculator) CalculateNextActionAt(reminder *models.Reminder, no
 	}
 
 	// 3. For CRP: add next_crp if we haven't reached quota
-	if reminder.MaxCRP == 0 || reminder.CRPCount < reminder.MaxCRP {
+	if reminder.MaxCRP > 0 || reminder.CRPCount < reminder.MaxCRP {
 		if reminder.IsNextCRPSet() {
 			// Use NextCRP if it's set (most reliable)
 			candidates = append(candidates, reminder.NextCRP)

@@ -312,9 +312,17 @@ func (w *Worker) processCRPForOneTime(ctx context.Context, reminder *models.Remi
 
 func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
 	log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
+	reminder.SnoozeUntil = time.Time{} // ✅ Clear snooze
 
 	// Get user and send notification
 	if err := w.sendNotification(ctx, reminder); err != nil {
+		log.Printf("❌ FRP sendNotification failed for %s, snoozing 30s: %v", reminder.ID, err)
+
+		reminder.SnoozeUntil = now.Add(60 * time.Second)
+		reminder.NextActionAt = reminder.SnoozeUntil
+
+		_ = w.reminderRepo.Update(ctx, reminder)
+
 		return err
 	}
 
