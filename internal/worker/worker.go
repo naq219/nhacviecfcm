@@ -105,6 +105,13 @@ func (w *Worker) Start(ctx context.Context) {
 	}()
 }
 
+func (w *Worker) RunOnce(ctx context.Context) {
+	w.runOnce(ctx)
+}
+func (w *Worker) DoNoThing(ctx context.Context) {
+
+}
+
 // runOnce processes a single worker cycle
 func (w *Worker) runOnce(ctx context.Context) {
 	// Check if enabled
@@ -161,6 +168,16 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 	// ========================================
 	// DEBUG: Log reminder state on load
 	// ========================================
+
+	if valid, reason := reminder.ValidateData(); !valid {
+		log.Printf("❌❌❌❌❌ Validation failed: %s", reason)
+		return nil
+	}
+	// tạm dừng, dù là 1 lần hay lặp đều nghỉ
+	if reminder.Status == models.ReminderStatusPaused {
+		return nil
+	}
+
 	log.Printf("📋 Loaded reminder %s: NextCRP=%v, LastSentAt=%v, CRPCount=%d, MaxCRP=%d",
 		reminder.ID,
 		reminder.NextCRP,
@@ -184,7 +201,23 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 	// ========================================
 	// STEP 1: Check FRP (has priority)
 	// ========================================
-	if reminder.Type == models.ReminderTypeRecurring && reminder.IsNextRecurringSet() {
+
+	if reminder.Type == models.ReminderTypeOneTime {
+		if reminder.CanSendFRPOneTime() {
+			// Chưa gửi → gửi ngay
+			return w.processCRPForOneTime(ctx, reminder, now)
+		}
+		if w.schedCalc.CanSendCRP(reminder, now) {
+			// Gửi retry
+			return w.processCRPForOneTime(ctx, reminder, now)
+		}
+
+		return nil // về thôi làm gì nữa
+	}
+	// còn lại phần của lặp FRP
+	// không cần reminder.Type == models.ReminderTypeRecurring vì đã check return  ở trên
+
+	if reminder.IsNextRecurringSet() {
 		if now.After(reminder.NextRecurring) || now.Equal(reminder.NextRecurring) {
 			return w.processFRP(ctx, reminder, now)
 		}
@@ -205,6 +238,61 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 		_ = w.reminderRepo.UpdateNextActionAt(ctx, reminder.ID, nextAction)
 	}
 
+	return nil
+}
+
+func (w *Worker) processCRPForOneTime(ctx context.Context, reminder *models.Reminder, now time.Time) error {
+	log.Printf("🔔 Worker: CRP triggered for ONE-TIME %s (count: %d/%d)",
+		reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
+
+	if err := w.sendNotification(ctx, reminder); err != nil {
+		return err // Lỗi gửi → stop, retry lần sau
+	}
+
+	reminder.LastSentAt = now
+	reminder.CRPCount++
+
+	reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
+
+	if reminder.MaxCRP == 0 {
+		// ========================================
+		// Case: MaxCRP = 0 (gửi 1 lần)
+		// ========================================
+		// Chỉ gửi 1 lần → xong
+		log.Printf("🏁 Worker: One-time MaxCRP=0, mark completed")
+		reminder.Status = models.ReminderStatusCompleted
+		reminder.LastCompletedAt = now
+		reminder.NextActionAt = time.Time{}
+		// Clear next_action_at (không còn action nào)
+		// Worker sẽ không query reminder này nữa (status = completed)
+
+	} else if reminder.CRPCount >= reminder.MaxCRP {
+
+		log.Printf("🏁 Worker: One-time quota reached (%d/%d), mark completed",
+			reminder.CRPCount, reminder.MaxCRP)
+		reminder.Status = models.ReminderStatusCompleted
+		reminder.LastCompletedAt = now
+		reminder.NextActionAt = time.Time{}
+
+	} else {
+
+		log.Printf("⏳ Worker: One-time still has quota (%d/%d), wait for next CRP",
+			reminder.CRPCount, reminder.MaxCRP)
+
+		reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
+	}
+
+	// ========================================
+	// 5. Update database với tất cả changes
+	// ========================================
+	if err := w.reminderRepo.Update(ctx, reminder); err != nil {
+		return fmt.Errorf("failed to update reminder after CRP: %w", err)
+	}
+
+	log.Printf("✅ Worker: One-time CRP processed (count=%d/%d). Status=%s, NextActionAt=%s",
+		reminder.CRPCount, reminder.MaxCRP,
+		reminder.Status,
+		reminder.NextActionAt.Format("15:04:05"))
 	return nil
 }
 

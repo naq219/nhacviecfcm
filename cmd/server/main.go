@@ -107,7 +107,13 @@ func main() {
 		schedCalculator, // ScheduleCalc
 		time.Duration(cfg.WorkerInterval)*time.Second, // interval
 	)
-	w.Start(bgCtx)
+	//w.Start(bgCtx)
+
+	go func() {
+		time.Sleep(3 * time.Second) // Chờ app ready
+		w.Start(bgCtx)
+		//os.Exit(0)
+	}()
 
 	// Setup routes
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {

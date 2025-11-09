@@ -303,6 +303,10 @@ func (c *ScheduleCalculator) calculateNextLunarLastDay(current time.Time, patter
 // CanSendCRP checks if we can send a CRP notification
 // Returns true if: quota not reached AND now >= next_crp
 func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time) bool {
+	if reminder.MaxCRP == 0 {
+		return false
+	}
+
 	// Check quota: if MaxCRP > 0, must not exceed it
 	if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
 		log.Printf("🚫 CRP quota reached for reminder %s (%d/%d)", reminder.ID, reminder.CRPCount, reminder.MaxCRP)
@@ -345,7 +349,7 @@ func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time
 	// ========================================
 	// NORMAL CASE: NextCRP is properly set
 	// ========================================
-	if now.Before(reminder.NextCRP) {
+	if now.Before(reminder.NextCRP) { //chưa đủ thời gian crp
 		remaining := reminder.NextCRP.Sub(now).Seconds()
 		log.Printf("⏳ CRP not ready yet for reminder %s (%.1fs remaining, next_crp=%s)",
 			reminder.ID, remaining, reminder.NextCRP.Format("15:04:05"))

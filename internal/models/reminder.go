@@ -142,9 +142,64 @@ func (r *Reminder) IsNextCRPSet() bool {
 	return IsTimeValid(r.NextCRP)
 }
 
-// IsLastSentAtSet checks if LastSentAt field is properly set
+// checks if LastSentAt field is properly set
 func (r *Reminder) IsLastSentAtSet() bool {
 	return IsTimeValid(r.LastSentAt)
+}
+
+// one_time, xem đã đến lúc gửi chưa
+func (r *Reminder) CanSendFRPOneTime() bool {
+	if r.Type == ReminderTypeOneTime && r.canTriggerNow(r.NextActionAt) {
+		return true
+	}
+	return false
+}
+
+// nếu dữ liệu không đúng, cảnh báo
+func (r *Reminder) ValidateData() (bool, string) {
+	// Check NextActionAt valid
+	if !IsTimeValid(r.NextActionAt) {
+		return false, r.ID + " NextActionAt không hợp lệ"
+	}
+
+	// Check Type valid
+	if r.Type != ReminderTypeOneTime && r.Type != ReminderTypeRecurring {
+		return false, r.ID + " Type phải là one_time hoặc recurring"
+	}
+
+	// Check Status valid
+	if r.Status != ReminderStatusActive &&
+		r.Status != ReminderStatusCompleted &&
+		r.Status != ReminderStatusPaused {
+		return false, r.ID + " Status không hợp lệ"
+	}
+
+	// Check Title không trống
+	if r.Title == "" {
+		return false, r.ID + " Title không được trống"
+	}
+
+	// Check MaxCRP >= 0
+	if r.MaxCRP < 0 {
+		return false, r.ID + " MaxCRP không được âm"
+	}
+
+	// Check CRPIntervalSec > 0 (nếu có CRP)
+	if r.MaxCRP > 0 && r.CRPIntervalSec <= 0 {
+		return false, r.ID + " CRPIntervalSec phải > 0"
+	}
+
+	// Check Recurring có NextRecurring
+	if r.Type == ReminderTypeRecurring && !IsTimeValid(r.NextRecurring) {
+		return false, r.ID + " Recurring phải có NextRecurring"
+	}
+
+	// Check UserID không trống
+	if r.UserID == "" {
+		return false, r.ID + " UserID không được trống"
+	}
+
+	return true, ""
 }
 
 // IsNextRecurringSet checks if NextRecurring field is properly set
@@ -155,4 +210,10 @@ func (r *Reminder) IsNextRecurringSet() bool {
 // IsSnoozeUntilActive checks if reminder is currently snoozed
 func (r *Reminder) IsSnoozeUntilActive(now time.Time) bool {
 	return IsTimeValid(r.SnoozeUntil) && r.SnoozeUntil.After(now)
+}
+
+// đã đến thời điểm so với now chưa
+func (r *Reminder) canTriggerNow(actionTime time.Time) bool {
+	now := time.Now()
+	return IsTimeValid(actionTime) && (now.After(actionTime) || now.Equal(actionTime))
 }
