@@ -69,6 +69,11 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 
 	reminder.UserID = authRecord.Id
 
+	// Validate reminder data
+	if err := validateReminderForCreate(&reminder); err != nil {
+		return utils.SendError(re, 400, "Invalid reminder data", err)
+	}
+
 	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
 		return utils.SendError(re, 400, "Failed to create reminder", err)
 	}
@@ -266,4 +271,57 @@ func (h *ReminderHandler) CompleteReminder(re *core.RequestEvent) error {
 	}
 
 	return utils.SendSuccess(re, "Reminder completed successfully", nil)
+}
+
+// validateReminderForCreate validates reminder data for creation
+func validateReminderForCreate(reminder *models.Reminder) error {
+	// Validate basic fields
+	if reminder.Title == "" {
+		return errors.New("Tiêu đề là bắt buộc")
+	}
+
+	if reminder.Type != models.ReminderTypeOneTime && reminder.Type != models.ReminderTypeRecurring {
+		return errors.New("Loại phải là one_time hoặc recurring")
+	}
+
+	// Validate next_action_at for all reminder types
+	if reminder.NextActionAt.IsZero() {
+		return errors.New("next_action_at là bắt buộc")
+	}
+
+	// NextActionAt phải >= now
+	// if reminder.NextActionAt.Before(time.Now()) {
+	// 	return errors.New("next_action_at phải lớn hơn hoặc bằng thời gian hiện tại")
+	// }
+
+	// Specific validation for recurring type
+	if reminder.Type == models.ReminderTypeRecurring {
+		// Validate recurrence pattern is set
+		if reminder.RecurrencePattern == nil {
+			return errors.New("recurrence_pattern là bắt buộc cho recurring reminders")
+		}
+
+		// Validate recurrence pattern fields
+		if reminder.RecurrencePattern.Type == "" {
+			return errors.New("recurrence_pattern.type là bắt buộc")
+		}
+
+		// Validate trigger time format if provided
+		if reminder.RecurrencePattern.TriggerTimeOfDay != "" {
+			_, err := time.Parse("15:04", reminder.RecurrencePattern.TriggerTimeOfDay)
+			if err != nil {
+				return errors.New("recurrence_pattern.trigger_time_of_day phải có định dạng HH:MM")
+			}
+		}
+
+		// Gán NextRecurring = NextActionAt
+		reminder.NextRecurring = reminder.NextActionAt
+	} else {
+		// For one_time reminders, ensure NextRecurring is zero
+		if !reminder.NextRecurring.IsZero() {
+			return errors.New("next_recurring phải là null cho one_time reminders")
+		}
+	}
+
+	return nil
 }

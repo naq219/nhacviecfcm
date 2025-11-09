@@ -149,7 +149,7 @@ func (r *Reminder) IsLastSentAtSet() bool {
 
 // one_time, xem đã đến lúc gửi chưa
 func (r *Reminder) CanSendFRPOneTime() bool {
-	if r.Type == ReminderTypeOneTime && r.canTriggerNow(r.NextActionAt) {
+	if r.Type == ReminderTypeOneTime && r.CanTriggerNow(r.NextActionAt) {
 		return true
 	}
 	return false
@@ -165,6 +165,10 @@ func (r *Reminder) ValidateData() (bool, string) {
 	// Check Type valid
 	if r.Type != ReminderTypeOneTime && r.Type != ReminderTypeRecurring {
 		return false, r.ID + " Type phải là one_time hoặc recurring"
+	}
+
+	if r.Type != ReminderTypeRecurring && !IsTimeValid(r.NextRecurring) {
+		return false, r.ID + " NextRecurring không hợp lệ"
 	}
 
 	// Check Status valid
@@ -213,7 +217,7 @@ func (r *Reminder) IsSnoozeUntilActive(now time.Time) bool {
 }
 
 // đã đến thời điểm so với now chưa
-func (r *Reminder) canTriggerNow(actionTime time.Time) bool {
+func (r *Reminder) CanTriggerNow(actionTime time.Time) bool {
 	now := time.Now()
 	return IsTimeValid(actionTime) && (now.After(actionTime) || now.Equal(actionTime))
 }

@@ -217,8 +217,20 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 	// còn lại phần của lặp FRP
 	// không cần reminder.Type == models.ReminderTypeRecurring vì đã check return  ở trên
 
-	if reminder.IsNextRecurringSet() {
-		if now.After(reminder.NextRecurring) || now.Equal(reminder.NextRecurring) {
+	// if now.After(reminder.NextRecurring) || now.Equal(reminder.NextRecurring) {
+	// 	return w.processFRP(ctx, reminder, now)
+	// }
+
+	if reminder.CanTriggerNow(reminder.NextRecurring) {
+
+		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+			if reminder.LastCompletedAt.After(reminder.LastSentAt) {
+				// User đã complete → OK, trigger FRP
+				return w.processFRP(ctx, reminder, now)
+
+			}
+		} else {
+			// vòng lặp cứ đến thời điểm là được notifi tiếp
 			return w.processFRP(ctx, reminder, now)
 		}
 	}
