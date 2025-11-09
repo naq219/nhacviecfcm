@@ -329,6 +329,10 @@ func validateReminderForCreate(reminder *models.Reminder) error {
 			}
 		}
 
+		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete && !models.IsTimeValid(reminder.LastCompletedAt) {
+			reminder.LastCompletedAt = time.Now()
+		}
+
 		// Gán NextRecurring = NextActionAt
 		reminder.NextRecurring = reminder.NextActionAt
 	} else {

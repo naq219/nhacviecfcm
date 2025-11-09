@@ -203,6 +203,11 @@ func (r *Reminder) ValidateData() (bool, string) {
 		return false, r.ID + " UserID không được trống"
 	}
 
+	// Check LastCompletedAt valid
+	if r.RepeatStrategy == RepeatStrategyCRPUntilComplete && !IsTimeValid(r.LastCompletedAt) {
+		return false, r.ID + " LastCompletedAt lặp chờ complete nên phải có giá trị"
+	}
+
 	return true, ""
 }
 
