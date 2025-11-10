@@ -102,7 +102,7 @@
         document.getElementById('raw').textContent = JSON.stringify(statusData, null, 2);
 
         // Fetch reminders using rquery API
-        const remindersRes = await fetch(`${API_BASE}/api/rquery?q=select%20*%20from%20reminders`);
+        const remindersRes = await fetch(`${API_BASE}/api/rquery?q=select%20*%20from%20reminders order by created desc`);
         const remindersData = await remindersRes.json();
         
         if (remindersData && remindersData.items) {
@@ -203,7 +203,7 @@
         <div class="row"><label>last_error:</label> <span id="last_error">...</span></div>
         <div class="row">
           <label for="error_input">Nhập last_error:</label>
-          <input id="error_input" type="text" placeholder="vd: testing error" />
+          <input style="width: 95%;;" id="error_input" type="text" placeholder="vd: testing error" />
         </div>
         <div class="row">
           <button onclick="updateStatus(true)">Enable worker</button>

@@ -342,5 +342,9 @@ func validateReminderForCreate(reminder *models.Reminder) error {
 		}
 	}
 
+	if reminder.MaxCRP > 0 && reminder.CRPIntervalSec <= 0 {
+		return errors.New("crp_interval_seconds phải lớn hơn 0 khi crp_count lớn hơn 0")
+	}
+
 	return nil
 }

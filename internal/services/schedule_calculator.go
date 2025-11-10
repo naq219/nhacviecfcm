@@ -83,7 +83,26 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 	current := reminder.NextRecurring
 
 	if current.IsZero() {
-		current = now
+		// Tùy theo repeat_strategy
+		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
+			// crp_until_complete: base = now
+			current = now
+		} else {
+			// none: base = start of period
+			switch pattern.Type {
+			case models.RecurrenceTypeDaily:
+				current = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+			case models.RecurrenceTypeWeekly:
+				weekday := now.Weekday()
+				current = now.AddDate(0, 0, -int(weekday)).Truncate(24 * time.Hour)
+			case models.RecurrenceTypeMonthly:
+				current = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+			case models.RecurrenceTypeIntervalSeconds:
+				current = now
+			default:
+				current = now
+			}
+		}
 	}
 
 	// Handle interval_seconds
