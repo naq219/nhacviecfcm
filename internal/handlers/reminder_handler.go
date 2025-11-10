@@ -63,7 +63,7 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 		return utils.SendError(re, 401, "Unauthorized", errors.New("user not authenticated"))
 	}
 
-	// First decode into a temporary struct that can handle for_test field
+	// First decode into a temporary struct that can handle for_test field and check trigger_time_of_day
 	var tempReminder struct {
 		models.Reminder
 		ForTestSeconds int `json:"for_test"`
@@ -82,12 +82,22 @@ func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 		log.Printf("now: %v", time.Now().UTC())
 	}
 
-	reminder.UserID = authRecord.Id
-
-	// Validate reminder data
 	if err := validateReminderForCreate(&reminder); err != nil {
 		return utils.SendError(re, 400, "Invalid reminder data", err)
 	}
+
+	// Auto-generate trigger_time_of_day from next_action_at if it's a recurring reminder
+	if reminder.Type == models.ReminderTypeRecurring {
+		if reminder.RecurrencePattern.TriggerTimeOfDay == "" {
+			// Format next_action_at time to "HH:MM" format
+			reminder.RecurrencePattern.TriggerTimeOfDay = reminder.NextActionAt.Format("15:04")
+			log.Printf("Auto-generated trigger_time_of_day: %s", reminder.RecurrencePattern.TriggerTimeOfDay)
+		}
+	}
+
+	reminder.UserID = authRecord.Id
+
+	// Validate reminder data
 
 	if err := h.reminderService.CreateReminder(re.Request.Context(), &reminder); err != nil {
 		return utils.SendError(re, 400, "Failed to create reminder", err)
@@ -323,10 +333,7 @@ func validateReminderForCreate(reminder *models.Reminder) error {
 
 		// Validate trigger time format if provided
 		if reminder.RecurrencePattern.TriggerTimeOfDay != "" {
-			_, err := time.Parse("15:04", reminder.RecurrencePattern.TriggerTimeOfDay)
-			if err != nil {
-				return errors.New("recurrence_pattern.trigger_time_of_day phải có định dạng HH:MM")
-			}
+			return errors.New("trigger_time_of_day không cần gửi lên (auto create)")
 		}
 
 		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete && !models.IsTimeValid(reminder.LastCompletedAt) {

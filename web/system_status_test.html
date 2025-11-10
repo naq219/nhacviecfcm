@@ -127,21 +127,29 @@
       html += '<div style="max-height: 400px; overflow-y: auto;">';
       
       reminders.forEach(reminder => {
+        // Tạo chuỗi hiển thị Type và Strategy trên cùng 1 hàng
+        const typeStrategyLine = `${reminder.type || 'N/A'}${reminder.repeat_strategy ? ' + Strategy: ' + reminder.repeat_strategy : ''}`;
+        
+        // Tạo chuỗi hiển thị max_crp, crp_interval_sec, crp_count trên 1 hàng
+        const crpLine = `max_crp: ${reminder.max_crp || 'N/A'}, crp_interval_sec: ${reminder.crp_interval_sec || 'N/A'}, crp_count: ${reminder.crp_count || 'N/A'}`;
+        
+        // Format Next Recurring với phần giây được highlight
+        const nextRecurring = formatTimeDifferenceWithHighlight(reminder.next_recurring);
+        
         html += `
           <div style="border: 1px solid #eee; padding: 12px; margin-bottom: 12px; border-radius: 6px; background: #fafafa;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
               <div><strong>ID:</strong> ${reminder.id || 'N/A'}</div>
               <div><strong>Title:</strong> ${reminder.title || 'N/A'}</div>
-              <div><strong>Type:</strong> ${reminder.type || 'N/A'}</div>
+              <div><strong>Type + Strategy:</strong> ${typeStrategyLine}</div>
               <div><strong>Calendar:</strong> ${reminder.calendar_type || 'N/A'}</div>
               <div><strong>Recurrence:</strong> ${reminder.recurrence_pattern || 'N/A'}</div>
-              <div><strong>Strategy:</strong> ${reminder.repeat_strategy || 'N/A'}</div>
-              <div><strong>Next Recurring:</strong> ${formatTimeDifference(reminder.next_recurring)}</div>
+              <div><strong>CRP Info:</strong> ${crpLine}</div>
+              <div><strong>Next Recurring:</strong> ${nextRecurring}</div>
               <div><strong>Next CRP:</strong> ${formatTimeDifference(reminder.next_crp)}</div>
               <div><strong>Next Action:</strong> ${formatTimeDifference(reminder.next_action_at)}</div>
               <div><strong>Last Sent:</strong> ${formatTimeDifference(reminder.last_sent_at)}</div>
               <div><strong>Last Completed:</strong> ${formatTimeDifference(reminder.last_completed_at)}</div>
-              <div><strong>Snooze Until:</strong> ${formatTimeDifference(reminder.snooze_until)}</div>
             </div>
           </div>
         `;
@@ -149,6 +157,65 @@
       
       html += '</div></div>';
       container.innerHTML = html;
+    }
+
+    // Hàm format thời gian với highlight phần giây
+    function formatTimeDifferenceWithHighlight(targetTime) {
+      if (!targetTime) return 'N/A';
+      
+      const now = new Date();
+      const target = new Date(targetTime);
+      const diffMs = target - now;
+      const diffSeconds = Math.floor(diffMs / 1000);
+      const diffMinutes = Math.floor(diffSeconds / 60);
+      const diffHours = Math.floor(diffMinutes / 60);
+      const diffDays = Math.floor(diffHours / 24);
+      
+      // Format thời gian địa phương
+      const localTime = target.toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      
+      // Format thời gian lệch chi tiết (không làm tròn)
+      let diffText = '';
+      let secondsPart = '';
+      
+      if (Math.abs(diffSeconds) < 60) {
+        secondsPart = `${Math.abs(diffSeconds)}s`;
+        diffText = secondsPart;
+      } else if (Math.abs(diffMinutes) < 60) {
+        const remainingSeconds = Math.abs(diffSeconds) % 60;
+        secondsPart = remainingSeconds > 0 ? `${remainingSeconds}s` : '';
+        diffText = remainingSeconds > 0 ? 
+          `${Math.abs(diffMinutes)}p${remainingSeconds}s` : 
+          `${Math.abs(diffMinutes)}p`;
+      } else if (Math.abs(diffHours) < 24) {
+        const remainingMinutes = Math.abs(diffMinutes) % 60;
+        const remainingSeconds = Math.abs(diffSeconds) % 60;
+        secondsPart = remainingSeconds > 0 ? `${remainingSeconds}s` : '';
+        diffText = remainingMinutes > 0 ? 
+          `${Math.abs(diffHours)}h${remainingMinutes}p${remainingSeconds > 0 ? remainingSeconds + 's' : ''}` : 
+          `${Math.abs(diffHours)}h${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
+      } else {
+        const remainingHours = Math.abs(diffHours) % 24;
+        const remainingMinutes = Math.abs(diffMinutes) % 60;
+        const remainingSeconds = Math.abs(diffSeconds) % 60;
+        secondsPart = remainingSeconds > 0 ? `${remainingSeconds}s` : '';
+        diffText = remainingHours > 0 ? 
+          `${Math.abs(diffDays)}d${remainingHours}h${remainingMinutes > 0 ? remainingMinutes + 'p' : ''}${remainingSeconds > 0 ? remainingSeconds + 's' : ''}` : 
+          `${Math.abs(diffDays)}d${remainingMinutes > 0 ? remainingMinutes + 'p' : ''}${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
+      }
+      
+      const sign = diffMs >= 0 ? '+' : '-';
+      
+      // Nếu có phần giây, highlight nó
+      if (secondsPart) {
+        return `${localTime} ${sign}${diffText.replace(secondsPart, `<span style="color: #ff6b6b; font-weight: bold;">${secondsPart}</span>`)}`;
+      }
+      
+      return `${localTime} ${sign}${diffText}`;
     }
 
     async function updateStatus(enable) {
