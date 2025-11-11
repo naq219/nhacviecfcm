@@ -79,8 +79,18 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 	if reminder.RecurrencePattern == nil {
 		return time.Time{}, errors.New("recurrence_pattern required for recurring reminder")
 	}
+
 	pattern := reminder.RecurrencePattern
 	current := reminder.NextRecurring
+
+	if reminder.CalendarType == models.CalendarTypeLunar {
+		nextLunar, err := FindNextLunarMonthly(now, pattern.DayOfMonth)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return nextLunar, nil
+		//return c.calculateNextLunarMonthly(current, pattern, now)
+	}
 
 	if current.IsZero() {
 		// Tùy theo repeat_strategy
@@ -243,7 +253,7 @@ func (c *ScheduleCalculator) calculateNextSolarMonthly(current time.Time, patter
 }
 
 // calculateNextLunarMonthly: Similar to solar but using lunar calendar
-func (c *ScheduleCalculator) calculateNextLunarMonthly(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+func (c *ScheduleCalculator) calculateNextLunarMonthly567(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
 	dayOfMonth := pattern.DayOfMonth
 	if dayOfMonth <= 0 {
 		dayOfMonth = 1
@@ -391,4 +401,96 @@ func parseTimeOfDay(timeStr string) (time.Time, error) {
 		return time.Time{}, errors.New("invalid time format, expected HH:MM")
 	}
 	return t, nil
+}
+
+// calculateNextLunarMonthly: Find next lunar day_of_month after now
+func (c *ScheduleCalculator) calculateNextLunarMonthly(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	dayOfMonth := pattern.DayOfMonth
+	if dayOfMonth <= 0 {
+		dayOfMonth = 1
+	}
+	interval := pattern.Interval
+	if interval <= 0 {
+		interval = 1
+	}
+
+	// Parse trigger time (HH:MM)
+	triggerHour, triggerMin := 0, 0
+	if pattern.TriggerTimeOfDay != "" {
+		t, err := parseTimeOfDay(pattern.TriggerTimeOfDay)
+		if err != nil {
+			return time.Time{}, err
+		}
+		triggerHour, triggerMin = t.Hour(), t.Minute()
+	}
+
+	// Dùng giờ Việt Nam (+07)
+	userTZ := time.FixedZone("VN", 7*3600)
+	vnNow := now.In(userTZ)
+
+	// 1. Chuyển now → âm lịch
+	lunarNow := c.lunarCalendar.SolarToLunar(vnNow)
+
+	// 2. Tính target month (nhảy interval)
+	targetMonth := lunarNow.Month
+	targetYear := lunarNow.Year
+
+	// Nếu đã qua ngày X hôm nay → nhảy thêm interval
+	if lunarNow.Day > dayOfMonth ||
+		(lunarNow.Day == dayOfMonth && vnNow.Hour() > triggerHour) ||
+		(lunarNow.Day == dayOfMonth && vnNow.Hour() == triggerHour && vnNow.Minute() >= triggerMin) {
+		targetMonth += interval
+	} else {
+		targetMonth += interval - 1
+	}
+
+	// Chuẩn hóa tháng
+	for targetMonth > 12 {
+		targetMonth -= 12
+		targetYear++
+	}
+
+	// 3. Tìm ngày hợp lệ (xử lý tháng nhuận)
+	for i := 0; i < 36; i++ {
+		// Kiểm tra tháng nhuận
+		leapMonth := c.getLeapMonth(targetYear)
+		isLeap := leapMonth > 0 && targetMonth == leapMonth
+
+		// Thử chuyển sang dương lịch
+		solar := c.lunarCalendar.LunarToSolarWithLeap(targetYear, targetMonth, dayOfMonth, isLeap)
+		if !solar.IsZero() {
+			local := time.Date(
+				solar.Year(), solar.Month(), solar.Day(),
+				triggerHour, triggerMin, 0, 0,
+				userTZ,
+			)
+			if local.After(vnNow) {
+				return local.UTC(), nil
+			}
+		}
+
+		// Nhảy tháng tiếp
+		targetMonth++
+		if targetMonth > 12 {
+			targetMonth = 1
+			targetYear++
+		}
+	}
+
+	return time.Time{}, errors.New("failed to find next lunar date")
+}
+
+// getLeapMonth trả về tháng nhuận (0 nếu không có)
+func (c *ScheduleCalculator) getLeapMonth(year int) int {
+	for m := 1; m <= 12; m++ {
+		solar := c.lunarCalendar.LunarToSolarWithLeap(year, m, 1, false)
+		if solar.IsZero() {
+			continue
+		}
+		lunarBack := c.lunarCalendar.SolarToLunar(solar)
+		if lunarBack.IsLeap && lunarBack.Month == m {
+			return m
+		}
+	}
+	return 0
 }

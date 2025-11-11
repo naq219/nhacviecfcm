@@ -755,3 +755,56 @@ json{
 
 
 trigger_time_of_day sẽ được tự tạo dựa vào NextActionAt 
+
+{
+  "recurrence_pattern": {
+    // ========================================
+    // REQUIRED - Luôn phải có
+    // ========================================
+    "type": "daily|weekly|monthly|lunar_last_day_of_month|interval_seconds",
+    
+    // ========================================
+    // OPTIONAL - Có hoặc không
+    // ========================================
+    "interval": 1,
+    // - Default: 1
+    // - Meaning: Mỗi X ngày/tuần/tháng
+    // - VD: interval=2 → mỗi 2 ngày, mỗi 2 tuần
+    // - Xuất hiện khi: type ∈ {daily, weekly, monthly}
+    // - ❌ KHÔNG dùng: interval_seconds, lunar_last_day_of_month
+    
+    "trigger_time_of_day": "HH:MM",
+    // - Format: "08:00", "14:30", "23:59"
+    // - Default: "00:00"
+    // - Meaning: Giờ trigger mỗi ngày
+    // - Xuất hiện khi: type ∈ {daily, weekly, monthly, lunar_last_day_of_month}
+    // - ❌ KHÔNG dùng: interval_seconds (không cần giờ cố định)
+    
+    "day_of_week": 0, -------------------CHƯA CÓ 
+    // - Range: 0-6 (0=Sun, 1=Mon, ..., 6=Sat)
+    // - Meaning: Ngày trong tuần
+    // - Xuất hiện khi: type == "weekly" ✅ BẮT BUỘC
+    // - ❌ KHÔNG dùng: daily, monthly, interval_seconds, lunar_*
+    
+    "day_of_month": 5,
+    // - Range: 1-31
+    // - Meaning: Ngày trong tháng
+    // - Xuất hiện khi: type == "monthly" ✅ BẮT BUỘC
+    // - ❌ KHÔNG dùng: daily, weekly, interval_seconds, lunar_*
+    // - ⚠️ Edge case: day=31 nhưng tháng có 30 ngày → auto adjust last day
+    
+    "interval_seconds": 180,
+    // - Range: > 0
+    // - Meaning: Khoảng cách giữa các trigger (giây)
+    // - VD: 180 = 3 phút, 86400 = 1 ngày
+    // - Xuất hiện khi: type == "interval_seconds" ✅ BẮT BUỘC
+    // - ❌ KHÔNG dùng: daily, weekly, monthly, lunar_*
+    
+    "calendar_type": "solar|lunar"
+    // - Default: "solar" (dương lịch)
+    // - Meaning: Loại lịch
+    // - ✅ DÙNG CHO: type ∈ {monthly}
+    // - ❌ KHÔNG dùng: daily, weekly, interval_seconds, lunar_last_day_of_month
+    // - Note: lunar_last_day_of_month đã implicit lunar
+  }
+}

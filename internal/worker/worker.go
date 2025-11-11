@@ -80,6 +80,7 @@ func NewWorker(
 
 // Start launches the background loop
 func (w *Worker) Start(ctx context.Context) {
+
 	if w == nil {
 		return
 	}

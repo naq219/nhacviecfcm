@@ -30,10 +30,21 @@ type LunarDate struct {
 	IsLeap   bool `json:"is_leap"`   // Tháng nhuận
 	LeapYear bool `json:"leap_year"` // Năm nhuận
 }
+type LunarDateMap struct {
+	Year   int  `json:"year"`
+	Month  int  `json:"month"`
+	Day    int  `json:"day"`
+	IsLeap bool `json:"is_leap"` // Tháng nhuận
+
+}
 
 // LunarCalendar handles lunar calendar conversions using Vietnamese lunar calendar algorithm
 type LunarCalendar struct {
 	timeZone float64 // GMT+7 for Vietnam
+}
+
+func (lc *LunarCalendar) GetDaysInMonth(year int, month int) any {
+	panic("unimplemented")
 }
 
 // NewLunarCalendar creates a new lunar calendar service for Vietnam timezone

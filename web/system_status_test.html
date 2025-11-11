@@ -46,6 +46,8 @@
     function formatTimeDifference(targetTime) {
       if (!targetTime) return 'N/A';
       
+
+      
       const now = new Date();
       const target = new Date(targetTime);
       const diffMs = target - now;
@@ -53,7 +55,7 @@
       const diffMinutes = Math.floor(diffSeconds / 60);
       const diffHours = Math.floor(diffMinutes / 60);
       const diffDays = Math.floor(diffHours / 24);
-      
+      const localDate = target.toLocaleDateString('vi-VN');
       // Format thời gian địa phương
       const localTime = target.toLocaleTimeString('vi-VN', { 
         hour: '2-digit', 
@@ -83,7 +85,9 @@
       }
       
       const sign = diffMs >= 0 ? '+' : '-';
-      return `${localTime} ${sign}${diffText}`;
+       return `${localDate} ${localTime} ${sign}${diffText}`;
+
+      //return `${localTime} ${sign}${diffText}`;
     }
 
     async function fetchStatus() {
