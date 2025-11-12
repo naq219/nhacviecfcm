@@ -123,8 +123,7 @@ RemiAq là reminder management system hỗ trợ:
   "recurrence_pattern": {
     "type": "weekly",
     "interval": 1,
-    "day_of_week": 1,
-    "trigger_time_of_day": ""
+    "day_of_week": 1
   },
   "repeat_strategy": "none",
   "max_crp": 3,
@@ -151,12 +150,20 @@ RemiAq là reminder management system hỗ trợ:
 
 3. **Auto-generation of trigger_time_of_day**:
    ```go
-   if reminder.Type == "recurring" && reminder.RecurrencePattern.TriggerTimeOfDay == "" {
+   // Nếu client gửi trigger_time_of_day (non-empty) → lỗi 400
+   if reminder.Type == models.ReminderTypeRecurring &&
+      reminder.RecurrencePattern.TriggerTimeOfDay != "" {
+       return errors.New("client không cần gửi trigger_time_of_day")
+   }
+
+   // Hệ thống tự tạo từ next_action_at → "HH:MM"
+   if reminder.Type == models.ReminderTypeRecurring &&
+      reminder.RecurrencePattern.TriggerTimeOfDay == "" {
        reminder.RecurrencePattern.TriggerTimeOfDay = reminder.NextActionAt.Format("15:04")
    }
    ```
-   - Tự động generate từ `next_action_at` format "HH:MM"
-   - Client KHÔNG được gửi `trigger_time_of_day` (return 400 error)
+   - Client không nên gửi trường `trigger_time_of_day`; hệ thống sẽ tự sinh.
+   - Nếu gửi giá trị không rỗng → trả về 400.
 
 4. **Validation Rules**:
    - `title`: Required
@@ -193,8 +200,8 @@ RemiAq là reminder management system hỗ trợ:
 #### Complete Reminder
 - `POST /api/reminders/:id/complete` - Mark as completed
   - one_time: Mark completed
-  - recurring + none: Reset CRP, FRP continues  
-  - recurring + crp_until_complete: Reset CRP + recalc next_recurring
+  - recurring + none: Reset CRP, FRP tiếp tục theo lịch  
+  - recurring + crp_until_complete: Reset CRP, tính `next_recurring` từ thời điểm user complete, và set `next_action_at = next_recurring`
 
 #### Snooze Reminder
 - `POST /api/reminders/:id/snooze` - Snooze for duration
@@ -256,11 +263,12 @@ if reminder.IsSnoozeUntilActive(now) {
 #### Step 1: One-Time Reminder Processing
 ```go
 if reminder.Type == "one_time" {
-    if !reminder.LastSentAt.IsZero() {
-        // First time sending
+    if reminder.CanSendFRPOneTime() {
+        // Lần gửi đầu tiên
         return w.processCRPForOneTime(ctx, reminder, now)
-    } else if w.schedCalc.CanSendCRP(reminder, now) {
-        // CRP retry
+    }
+    if w.schedCalc.CanSendCRP(reminder, now) {
+        // Retry theo CRP
         return w.processCRPForOneTime(ctx, reminder, now)
     }
     return nil
@@ -336,6 +344,8 @@ func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now 
     if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
         if reminder.Type == "one_time" {
             reminder.Status = "completed"
+            // One-time: clear next_action_at khi hoàn thành
+            reminder.NextActionAt = time.Time{}
         }
         // Reset for next FRP cycle
         reminder.CRPCount = 0
@@ -345,8 +355,10 @@ func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now 
         reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
     }
     
-    // 4. Recalculate next action time
-    reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
+    // 4. Recalculate next action time (chỉ khi chưa completed)
+    if reminder.Status != "completed" {
+        reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
+    }
     
     // 5. Update database
     return w.reminderRepo.Update(ctx, reminder)

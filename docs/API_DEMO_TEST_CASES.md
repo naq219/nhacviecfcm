@@ -45,6 +45,7 @@ curl -X POST http://localhost:8090/api/reminders \
     "description": "Họp với team ngay lập tức",
     "type": "one_time",
     "calendar_type": "solar",
+    "for_test": 10,
     "max_crp": 0,
     "crp_interval_sec": 0,
     "status": "active"
@@ -61,7 +62,7 @@ curl -X POST http://localhost:8090/api/reminders \
     "description": "Họp với khách hàng lúc 3PM",
     "type": "one_time",
     "calendar_type": "solar",
-    "next_recurring": "2025-11-08T15:00:00Z",
+    "next_action_at": "2025-11-08T15:00:00Z",
     "max_crp": 0,
     "crp_interval_sec": 0,
     "status": "active"
@@ -78,8 +79,9 @@ curl -X POST http://localhost:8090/api/reminders \
     "description": "Sẽ thử lại 3 lần nếu fail",
     "type": "one_time",
     "calendar_type": "solar",
+    "for_test": 5,
     "max_crp": 3,
-    "crp_interval_sec": 300,  # 5 phút
+    "crp_interval_sec": 300,
     "status": "active"
   }'
 ```
@@ -97,10 +99,10 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-09T08:00:00Z",
     "recurrence_pattern": {
       "type": "daily",
-      "interval": 1,
-      "trigger_time_of_day": "08:00"
+      "interval": 1
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -119,11 +121,11 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-10T09:00:00Z",
     "recurrence_pattern": {
       "type": "weekly",
       "interval": 1,
-      "day_of_week": 1,  # Thứ 2
-      "trigger_time_of_day": "09:00"
+      "day_of_week": 1
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -142,11 +144,11 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-15T10:00:00Z",
     "recurrence_pattern": {
       "type": "monthly",
       "interval": 1,
-      "day_of_month": 15,
-      "trigger_time_of_day": "10:00"
+      "day_of_month": 15
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -165,9 +167,10 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-08T00:00:00Z",
     "recurrence_pattern": {
       "type": "interval_seconds",
-      "interval_seconds": 7200  # 2 giờ
+      "interval_seconds": 7200
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -188,11 +191,11 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "lunar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-10T08:00:00Z",
     "recurrence_pattern": {
       "type": "monthly",
       "interval": 1,
-      "day_of_month": 10,
-      "trigger_time_of_day": "08:00"
+      "day_of_month": 10
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -211,9 +214,10 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "lunar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-30T20:00:00Z",
     "recurrence_pattern": {
       "type": "lunar_last_day_of_month",
-      "trigger_time_of_day": "20:00"
+      
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
@@ -234,13 +238,13 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-09T09:00:00Z",
     "recurrence_pattern": {
       "type": "daily",
-      "interval": 1,
-      "trigger_time_of_day": "09:00"
+      "interval": 1
     },
     "max_crp": 3,
-    "crp_interval_sec": 600,  # 10 phút
+    "crp_interval_sec": 600,
     "status": "active"
   }'
 ```
@@ -256,14 +260,14 @@ curl -X POST http://localhost:8090/api/reminders \
     "type": "recurring",
     "calendar_type": "solar",
     "repeat_strategy": "none",
+    "next_action_at": "2025-11-09T08:00:00Z",
     "recurrence_pattern": {
       "type": "daily",
-      "interval": 1,
-      "trigger_time_of_day": "08:00"
+      "interval": 1
     },
     "max_crp": 1,
     "crp_interval_sec": 0,
-    "status": "paused"  # Tạm dừng
+    "status": "paused"
   }'
 ```
 
@@ -305,7 +309,7 @@ curl -X POST http://localhost:8090/api/reminders/REMINDER_ID/complete \
 curl -X POST http://localhost:8090/api/reminders/REMINDER_ID/snooze \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "snooze_minutes": 30  # Trì hoãn 30 phút
+    "duration": 1800
   }'
 ```
 
@@ -374,6 +378,7 @@ async function testFlow() {
       description: 'Reminder for testing',
       type: 'one_time',
       calendar_type: 'solar',
+      for_test: 10,
       max_crp: 0,
       crp_interval_sec: 0,
       status: 'active'
