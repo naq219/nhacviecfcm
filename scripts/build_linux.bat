@@ -10,7 +10,7 @@ REM Build for Linux AMD64 (optimized)
 echo 📦 Building optimized for Linux AMD64...
 set GOOS=linux
 set GOARCH=amd64
-go build -ldflags="-s -w" -trimpath -o bin/remiaq-linux-amd64 ./cmd/server
+go build -ldflags="-s -w" -trimpath -o bin/remiaq_run1-linux  ./cmd/server
 
 REM Build for Linux ARM64 (optimized)
 echo 📦 Building optimized for Linux ARM64...
@@ -27,3 +27,7 @@ echo.
 echo 📋 To deploy, copy the appropriate binary to your Linux server.
 
 pause
+
+
+
+GOOS=linux GOARCH=amd64 go build -o bin/remiaq_run1-linux ./cmd/server

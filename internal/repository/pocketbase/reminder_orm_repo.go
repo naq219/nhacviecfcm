@@ -36,6 +36,7 @@ func recordToReminder(record *core.Record) (*models.Reminder, error) {
 		UserID:             record.GetString("user_id"),
 		Title:              record.GetString("title"),
 		Description:        record.GetString("description"),
+		Tag:                record.GetString("tag"),
 		Type:               record.GetString("type"),
 		CalendarType:       record.GetString("calendar_type"),
 		NextRecurring:      record.GetDateTime("next_recurring").Time(),
@@ -72,6 +73,7 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 	record.Set("user_id", reminder.UserID)
 	record.Set("title", reminder.Title)
 	record.Set("description", reminder.Description)
+	record.Set("tag", reminder.Tag)
 	record.Set("type", reminder.Type)
 	record.Set("calendar_type", reminder.CalendarType)
 
@@ -210,6 +212,7 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 		UserID             string         `db:"user_id"`
 		Title              string         `db:"title"`
 		Description        string         `db:"description"`
+		Tag                string         `db:"tag"`
 		Type               string         `db:"type"`
 		CalendarType       string         `db:"calendar_type"`
 		NextRecurring      string         `db:"next_recurring"`
@@ -255,6 +258,7 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 			UserID:             rec.UserID,
 			Title:              rec.Title,
 			Description:        rec.Description,
+			Tag:                rec.Tag,
 			Type:               rec.Type,
 			CalendarType:       rec.CalendarType,
 			NextRecurring:      parseTimeDB(rec.NextRecurring),
@@ -295,6 +299,7 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 		UserID             string         `db:"user_id"`
 		Title              string         `db:"title"`
 		Description        string         `db:"description"`
+		Tag                string         `db:"tag"`
 		Type               string         `db:"type"`
 		CalendarType       string         `db:"calendar_type"`
 		NextRecurring      string         `db:"next_recurring"`
@@ -332,6 +337,7 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 			UserID:             rec.UserID,
 			Title:              rec.Title,
 			Description:        rec.Description,
+			Tag:                rec.Tag,
 			Type:               rec.Type,
 			CalendarType:       rec.CalendarType,
 			NextRecurring:      parseTimeDB(rec.NextRecurring),

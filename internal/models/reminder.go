@@ -38,6 +38,9 @@ type Reminder struct {
 	// Status
 	Status string `json:"status" db:"status"` // active, completed, paused
 
+	// Tag for categorization
+	Tag string `json:"tag" db:"tag"` // work, personal, health, finance, etc.
+
 	// Timestamps
 	Created time.Time `json:"created" db:"created"`
 	Updated time.Time `json:"updated" db:"updated"`

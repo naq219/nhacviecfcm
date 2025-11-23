@@ -77,6 +77,10 @@ func init() {
 			Name:     "description",
 			Required: false,
 		})
+		remindersCollection.Fields.Add(&core.TextField{
+			Name:     "tag",
+			Required: false,
+		})
 		remindersCollection.Fields.Add(&core.SelectField{
 			Name:      "type",
 			Required:  true,
