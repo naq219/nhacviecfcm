@@ -68,10 +68,10 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 		}
 		reminder.NextCRP = reminder.NextRecurring
 		reminder.CRPCount = 0
+		reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
 	}
 
 	// Calculate next_action_at
-	reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
 
 	if err := s.reminderRepo.Create(ctx, reminder); err != nil {
 		return fmt.Errorf("failed to create reminder: %w", err)
