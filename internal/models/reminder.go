@@ -58,16 +58,7 @@ type RecurrencePattern struct {
 
 }
 
-// User represents a user with FCM token
-type User struct {
-	ID          string    `json:"id" db:"id"`
-	Email       string    `json:"email" db:"email"`
-	FCMToken    string    `json:"fcm_token" db:"fcm_token"`
-	IsFCMActive bool      `json:"is_fcm_active" db:"is_fcm_active"`
-	FCMError    string    `json:"fcm_error" db:"fcm_error"`
-	Created     time.Time `json:"created" db:"created"`
-	Updated     time.Time `json:"updated" db:"updated"`
-}
+
 
 // SystemStatus represents system configuration (singleton)
 type SystemStatus struct {
