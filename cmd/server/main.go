@@ -89,11 +89,13 @@ func main() {
 	lunarCalendar := services.NewLunarCalendar()
 	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
 	reminderService := services.NewReminderService(reminderRepo, userRepo, fcmService, schedCalculator)
+	userService := services.NewUserService(userRepo) // Khởi tạo UserService
 
 	// Initialize handlers
 	reminderHandler := handlers.NewReminderHandler(reminderService)
 	queryHandler := handlers.NewQueryHandler(queryRepo)
 	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
+	userHandler := handlers.NewUserHandler(userService) // Khởi tạo UserHandler
 
 	// Initialize and start background worker with all dependencies
 	bgCtx, cancel := context.WithCancel(context.Background())
@@ -169,6 +171,9 @@ func main() {
 		api.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
 		api.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
 		api.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
+
+		// User API
+		api.PUT("/users/fcm-token", userHandler.UpdateFCMToken) // New route for updating FCM token
 
 		// System status API
 		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
