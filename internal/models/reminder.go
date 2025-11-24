@@ -58,8 +58,6 @@ type RecurrencePattern struct {
 
 }
 
-
-
 // SystemStatus represents system configuration (singleton)
 type SystemStatus struct {
 	ID            int       `json:"mid" db:"mid"` // Always 1
@@ -161,7 +159,7 @@ func (r *Reminder) ValidateData() (bool, string) {
 		return false, r.ID + " Type phải là one_time hoặc recurring"
 	}
 
-	if r.Type != ReminderTypeRecurring && !IsTimeValid(r.NextRecurring) {
+	if r.Type == ReminderTypeRecurring && !IsTimeValid(r.NextRecurring) {
 		return false, r.ID + " NextRecurring không hợp lệ"
 	}
 
