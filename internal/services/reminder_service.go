@@ -57,6 +57,10 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 	if reminder.Type == models.ReminderTypeOneTime {
 		reminder.NextCRP = now
 		reminder.CRPCount = 0
+		// Keep next_action_at from client for one_time reminders
+		if reminder.NextActionAt.IsZero() {
+			reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+		}
 	} else {
 		// For recurring: use NextRecurring if set, otherwise calculate
 		if reminder.NextRecurring.IsZero() {
@@ -68,7 +72,10 @@ func (s *ReminderService) CreateReminder(ctx context.Context, reminder *models.R
 		}
 		reminder.NextCRP = reminder.NextRecurring
 		reminder.CRPCount = 0
-		reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+		// Keep next_action_at from client for recurring reminders
+		if reminder.NextActionAt.IsZero() {
+			reminder.NextActionAt = s.schedCalculator.CalculateNextActionAt(reminder, now)
+		}
 	}
 
 	// Calculate next_action_at
