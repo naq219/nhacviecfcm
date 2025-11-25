@@ -333,7 +333,6 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 	// Update tracking
 	reminder.LastSentAt = now
 	reminder.CRPCount = 0
-	reminder.NextCRP = reminder.NextRecurring
 
 	// ========================================
 	// CRITICAL FIX: Calculate next FRP
@@ -360,7 +359,10 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 
 	// Recalc next_action_at
 	reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
-
+	reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
+	log.Printf("naq CRPIntervalSec: %d", reminder.CRPIntervalSec)
+	log.Printf("NextRecurring: %s", reminder.NextRecurring)
+	log.Printf("NextCRP: %s", reminder.NextCRP)
 	// Update DB
 	if err := w.reminderRepo.Update(ctx, reminder); err != nil {
 		return fmt.Errorf("failed to update reminder after FRP: %w", err)
