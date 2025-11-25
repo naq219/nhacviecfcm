@@ -195,8 +195,9 @@ func (r *Reminder) ValidateData() (bool, string) {
 		return false, r.ID + " UserID không được trống"
 	}
 
-	// Check LastCompletedAt valid
-	if r.RepeatStrategy == RepeatStrategyCRPUntilComplete && !IsTimeValid(r.LastCompletedAt) {
+	// Check LastCompletedAt valid - only require value if reminder has been processed
+	// For new reminders, LastCompletedAt can be empty initially
+	if r.RepeatStrategy == RepeatStrategyCRPUntilComplete && r.IsLastSentAtSet() && !IsTimeValid(r.LastCompletedAt) {
 		return false, r.ID + " LastCompletedAt lặp chờ complete nên phải có giá trị"
 	}
 

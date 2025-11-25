@@ -20,7 +20,7 @@ done
 # ---- BUILD NẾU CÓ TUỲ CHỌN ----
 if [ "$BUILD" = true ]; then
     echo "===> Xóa file local cũ..."
-    rm "$LOCAL_FILE"
+    rm -f "$LOCAL_FILE"
     if [ $? -ne 0 ]; then
         echo "===> Không thể xóa file $LOCAL_FILE. Thoát!"
         exit 1
@@ -39,9 +39,17 @@ echo "===> Kiểm tra / tạo thư mục trên VPS..."
 ssh -i "$SSH_KEY" "$REMOTE_HOST" "mkdir -p $REMOTE_PATH"
 if [ $? -ne 0 ]; then
     echo "===> Tạo thư mục thất bại!"
-    exit 1
+    
 fi
+ssh -i "$SSH_KEY" "$REMOTE_HOST" <<EOF
+if [ -f "$REMOTE_PATH/$(basename $LOCAL_FILE)" ]; then
+    NOW=\$(date +"%d-%m-%Y_%H-%M")
+    mv "$REMOTE_PATH/$(basename $LOCAL_FILE)" "$REMOTE_PATH/$(basename $LOCAL_FILE)_\$NOW"
+    echo "===> Đổi tên file trên server thành: $(basename $LOCAL_FILE)_\$NOW"
+fi
+EOF
 
+sleep 1
 # ---- UPLOAD FILE ----
 echo "===> Upload file bằng SCP..."
 scp -i "$SSH_KEY" "$LOCAL_FILE" "$REMOTE_HOST:$REMOTE_PATH/"

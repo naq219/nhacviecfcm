@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"remiaq/internal/models"
+	"remiaq/internal/utils"
 )
 
 // FCMSender sends FCM notifications
@@ -172,6 +173,8 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 
 	if valid, reason := reminder.ValidateData(); !valid {
 		log.Printf("❌❌❌❌❌ Validation failed: %s", reason)
+		// Log error to notifi_error.txt
+		utils.LogErrorToFile(reminder.ID, fmt.Sprintf("Validation failed: %s", reason))
 		return nil
 	}
 	// tạm dừng, dù là 1 lần hay lặp đều nghỉ
@@ -225,7 +228,7 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 	if reminder.CanTriggerNow(reminder.NextRecurring) {
 
 		if reminder.RepeatStrategy == models.RepeatStrategyCRPUntilComplete {
-			if reminder.LastCompletedAt.After(reminder.LastSentAt) {
+			if !utils.IsTimeValid(reminder.LastSentAt) || reminder.LastCompletedAt.After(reminder.LastSentAt) {
 				// User đã complete → OK, trigger FRP
 				return w.processFRP(ctx, reminder, now)
 
@@ -336,18 +339,24 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 	// CRITICAL FIX: Calculate next FRP
 	// ========================================
 	// For repeat_strategy = "crp_until_complete":
-	// NextRecurring should STILL be recalculated!
-	// Only the timing basis changes (waits for user complete)
-	// But we need to move it forward from current position
+	// NextRecurring should NOT be recalculated here.
+	// It should only be advanced when the user completes the reminder.
+	// For other repeat strategies, it should be recalculated.
 
-	nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
-	if err != nil {
-		log.Printf("Worker: Warning - failed to calc next FRP for %s: %v", reminder.ID, err)
-		nextRecurring = now.Add(24 * time.Hour)
+	if reminder.RepeatStrategy != models.RepeatStrategyCRPUntilComplete {
+		nextRecurring, err := w.schedCalc.CalculateNextRecurring(reminder, now)
+		if err != nil {
+			log.Printf("Worker: Warning - failed to calc next FRP for %s: %v", reminder.ID, err)
+			nextRecurring = now.Add(24 * time.Hour)
+		}
+		reminder.NextRecurring = nextRecurring
+		log.Printf("📅 Calculated NextRecurring: %s (from now: %s)",
+			nextRecurring.Format("15:04:05"), now.Format("15:04:05"))
+	} else {
+		// For CRPUntilComplete, NextRecurring is only updated on user completion.
+		// We just log that it's not being advanced here.
+		log.Printf("📅 NextRecurring for CRPUntilComplete reminder %s not advanced by FRP trigger.", reminder.ID)
 	}
-	reminder.NextRecurring = nextRecurring
-	log.Printf("📅 Calculated NextRecurring: %s (from now: %s)",
-		nextRecurring.Format("15:04:05"), now.Format("15:04:05"))
 
 	// Recalc next_action_at
 	reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
