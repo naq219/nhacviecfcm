@@ -38,7 +38,18 @@ reminders có field mới: isSendedOneTime: boolean
         - if crp_count >= max_crp:
             - set status = completed
 
-## 3. Lặp lại - không CRP
+ ## 4. Lặp lại - không có CRP - không có crp_until_complete 
 
 
-## 4. Lặp lại - có CRP
+## 5. Lặp lại - không có CRP - có crp_until_complete 
+      
+ ## 6. Lặp lại - có CRP - không có crp_until_complete 
+ 
+ ## 7. Lặp lại - có CRP - có crp_until_complete 
+     
+ 
+
+    
+ 
+ 
+ 

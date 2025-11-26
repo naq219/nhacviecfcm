@@ -73,6 +73,9 @@ var (
 
 // InitializeFirebase khởi tạo Firebase App và Messaging Client một lần duy nhất
 func InitializeFirebase(ctx context.Context) error {
+	if true {
+		return nil
+	}
 	initOnce.Do(func() {
 		// Giải mã credentials
 		credentialsJSON, err := decodeBase64(encodedFirebaseCredentials)
@@ -153,14 +156,14 @@ func SendFCMNotification(ctx context.Context, title, body, deviceToken, userName
 	// Tạo request
 	req, err := http.NewRequest("POST", "http://localhost:404/send-fcm", bytes.NewBuffer(jsonData))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// Gửi request
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	defer resp.Body.Close()
 

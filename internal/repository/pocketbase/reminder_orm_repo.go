@@ -53,6 +53,7 @@ func recordToReminder(record *core.Record) (*models.Reminder, error) {
 		LastCompletedAt:    record.GetDateTime("last_completed_at").Time(),
 		Created:            record.GetDateTime("created").Time(),
 		Updated:            record.GetDateTime("updated").Time(),
+		IsSendedOneTime:    record.GetInt("is_sended_one_time"),
 	}
 
 	// Parse RecurrencePattern if present
@@ -126,6 +127,8 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 	} else {
 		record.Set("last_completed_at", nil)
 	}
+
+	record.Set("is_sended_one_time", reminder.IsSendedOneTime)
 
 	// Serialize RecurrencePattern if present
 	if reminder.RecurrencePattern != nil {

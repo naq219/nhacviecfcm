@@ -17,6 +17,7 @@ import (
 	"remiaq/internal/middleware"
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
+	"remiaq/internal/services/fcmutils"
 	"remiaq/internal/worker"
 
 	// Import migrations package để PocketBase load migrations
@@ -49,10 +50,10 @@ import (
 
 func main() {
 
-	//ctx := context.Background()
-	// if err := fcmutils.InitializeFirebase(ctx); err != nil {
-	// 	log.Fatalf("Failed to initialize Firebase: %v", err)
-	// }
+	ctx := context.Background()
+	if err := fcmutils.InitializeFirebase(ctx); err != nil {
+		log.Fatalf("Failed to initialize Firebase: %v", err)
+	}
 
 	// Load configuration
 	if err := godotenv.Load(); err != nil {
@@ -117,9 +118,17 @@ func main() {
 	)
 	//w.Start(bgCtx)
 
+	w2 := worker.NewWorkerV2(
+		sysRepo,
+		reminderRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+	)
+
 	go func() {
-		time.Sleep(13 * time.Second) // Chờ app ready
+		time.Sleep(5 * time.Second) // Chờ app ready
 		w.Start(bgCtx)
+		w2.Start(bgCtx)
 		//os.Exit(0)
 	}()
 

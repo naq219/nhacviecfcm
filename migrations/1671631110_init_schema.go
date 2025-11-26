@@ -120,6 +120,10 @@ func init() {
 			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.NumberField{
+			Name:     "is_sended_one_time",
+			Required: false,
+		})
+		remindersCollection.Fields.Add(&core.NumberField{
 			Name:     "max_crp",
 			Required: false,
 		})
