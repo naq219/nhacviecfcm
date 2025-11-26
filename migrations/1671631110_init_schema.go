@@ -128,6 +128,11 @@ func init() {
 			Required: false,
 		})
 
+		remindersCollection.Fields.Add(&core.BoolField{
+			Name:     "is_sended_one_time",
+			Required: false,
+		})
+
 		// Tracking fields
 		remindersCollection.Fields.Add(&core.DateField{
 			Name:     "next_action_at",

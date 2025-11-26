@@ -117,9 +117,19 @@ func main() {
 	)
 	//w.Start(bgCtx)
 
+	// Initialize worker-specific repo
+	workerRepo := worker.NewWorkerReminderRepo(app)
+
+	wOneTimeV2 := worker.NewWorkerOneTimeV2(
+		workerRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+	)
+
 	go func() {
 		time.Sleep(13 * time.Second) // Chờ app ready
 		w.Start(bgCtx)
+		wOneTimeV2.Start(bgCtx)
 		//os.Exit(0)
 	}()
 

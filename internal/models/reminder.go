@@ -37,7 +37,8 @@ type Reminder struct {
 	SnoozeUntil time.Time `json:"snooze_until" db:"snooze_until"`
 
 	// Status
-	Status string `json:"status" db:"status"` // active, completed, paused
+	Status          string `json:"status" db:"status"` // active, completed, paused
+	IsSendedOneTime bool   `json:"is_sended_one_time" db:"is_sended_one_time"`
 
 	// Tag for categorization
 	Tag string `json:"tag" db:"tag"` // work, personal, health, finance, etc.
