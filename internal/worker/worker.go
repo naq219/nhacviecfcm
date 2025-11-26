@@ -316,7 +316,7 @@ func (w *Worker) processCRPForOneTime(ctx context.Context, reminder *models.Remi
 func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
 	//log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
 	reminder.SnoozeUntil = time.Time{} // ✅ Clear snooze
-	reminder.Description = fmt.Sprintf("%s (FRP) {%d/%d} time: %s now: %s", reminder.Description, reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"), time.Now().Format("15:04:05"))
+	reminder.Description = fmt.Sprintf(" (FRP) {%d/%d} time: %s now: %s", reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"), time.Now().Format("15:04:05"))
 	log.Printf("** processFRP reminder.Description %s", reminder.Description)
 	log.Printf("** processFRP time %s", now.Format("15:04:05"))
 	log.Printf("** processFRP now %s", time.Now().Format("15:04:05"))
@@ -446,7 +446,7 @@ func (w *Worker) sendNotification(ctx context.Context, reminder *models.Reminder
 	}
 
 	log.Printf("zoooooooo 4 sendNotification: user FCM token: %s", user.FCMToken)
-	responFcm, err := fcmutils.SendFCMNotification(ctx, reminder.Title, reminder.Description, user.FCMToken)
+	responFcm, err := fcmutils.SendFCMNotification(ctx, reminder.Title, reminder.Description, user.FCMToken, user.Email)
 	if err != nil {
 		return fmt.Errorf("***** fcm system error: %w", err)
 	}

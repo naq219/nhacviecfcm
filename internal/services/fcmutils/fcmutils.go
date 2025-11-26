@@ -1,10 +1,14 @@
 package fcmutils
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -123,7 +127,50 @@ func decodeBase64(encoded string) (string, error) {
 // ============================================
 
 // SendFCMNotification gửi notification với retry logic
-func SendFCMNotification(ctx context.Context, title, body, deviceToken string) (string, error) {
+
+type FCMRequest1 struct {
+	DeviceName  string `json:"device_name"`
+	DeviceToken string `json:"device_token"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+}
+
+func SendFCMNotification(ctx context.Context, title, body, deviceToken, userName string) (string, error) {
+	reqBody := FCMRequest1{
+		DeviceName:  userName,
+		DeviceToken: deviceToken,
+		Title:       title,
+		Body:        body,
+	}
+
+	jsonData, _ := json.Marshal(reqBody)
+
+	// HTTP client custom để chạy mượt
+	client := &http.Client{
+		Timeout: 5 * time.Second, // chống treo request
+	}
+
+	// Tạo request
+	req, err := http.NewRequest("POST", "http://localhost:404/send-fcm", bytes.NewBuffer(jsonData))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Gửi request
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// Đọc response
+	body1, _ := io.ReadAll(resp.Body)
+	fmt.Println("Response:", string(body1))
+	return string("body"), nil
+}
+
+func SendFCMNotification1(ctx context.Context, title, body, deviceToken string) (string, error) {
 	client, err := GetMessagingClient()
 	if err != nil {
 		return "", err
@@ -240,7 +287,7 @@ func WarmupFCM(ctx context.Context, testToken string) error {
 	}
 
 	log.Println("🔥 Warming up FCM connection...")
-	_, err := SendFCMNotification(ctx, "Warmup", "Firebase connection test", testToken)
+	_, err := SendFCMNotification(ctx, "Warmup", "Firebase connection test", testToken, "")
 	if err != nil {
 		log.Printf("⚠️  FCM warmup failed (non-critical): %v", err)
 		// Không return error vì warmup failure không phải vấn đề critical
