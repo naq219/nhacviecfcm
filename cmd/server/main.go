@@ -17,6 +17,7 @@ import (
 	"remiaq/internal/middleware"
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
+	"remiaq/internal/services/fcmutils"
 	"remiaq/internal/worker"
 
 	// Import migrations package để PocketBase load migrations
@@ -48,6 +49,12 @@ import (
 //	@externalDocs.url			https://swagger.io/resources/open-api/
 
 func main() {
+
+	ctx := context.Background()
+	if err := fcmutils.InitializeFirebase(ctx); err != nil {
+		log.Fatalf("Failed to initialize Firebase: %v", err)
+	}
+
 	// Load configuration
 	if err := godotenv.Load(); err != nil {
 		if !os.IsNotExist(err) {
@@ -76,19 +83,19 @@ func main() {
 	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 
 	// Initialize services
-	var fcmService *services.FCMService
-	if _, err := os.Stat(cfg.FCMCredentials); err == nil {
-		fcmService, err = services.NewFCMService(cfg.FCMCredentials)
-		if err != nil {
-			log.Printf("Warning: Failed to initialize FCM service: %v", err)
-		}
-	} else {
-		log.Println("Warning: FCM credentials not found, notifications disabled")
-	}
+	// var fcmService *services.FCMService
+	// if _, err := os.Stat(cfg.FCMCredentials); err == nil {
+	// 	fcmService, err = services.NewFCMService(cfg.FCMCredentials)
+	// 	if err != nil {
+	// 		log.Printf("Warning: Failed to initialize FCM service: %v", err)
+	// 	}
+	// } else {
+	// 	log.Println("Warning: FCM credentials not found, notifications disabled")
+	// }
 
 	lunarCalendar := services.NewLunarCalendar()
 	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
-	reminderService := services.NewReminderService(reminderRepo, userRepo, fcmService, schedCalculator)
+	reminderService := services.NewReminderService(reminderRepo, userRepo, schedCalculator)
 	userService := services.NewUserService(userRepo) // Khởi tạo UserService
 
 	// Initialize handlers
@@ -102,17 +109,17 @@ func main() {
 	defer cancel()
 
 	w := worker.NewWorker(
-		sysRepo,         // SystemStatusRepo
-		reminderRepo,    // ReminderRepo
-		userRepo,        // UserRepo
-		fcmService,      // FCMSender
+		sysRepo,      // SystemStatusRepo
+		reminderRepo, // ReminderRepo
+		userRepo,     // UserRepo
+
 		schedCalculator, // ScheduleCalc
 		time.Duration(cfg.WorkerInterval)*time.Second, // interval
 	)
 	//w.Start(bgCtx)
 
 	go func() {
-		time.Sleep(3 * time.Second) // Chờ app ready
+		time.Sleep(13 * time.Second) // Chờ app ready
 		w.Start(bgCtx)
 		//os.Exit(0)
 	}()
@@ -134,7 +141,7 @@ func main() {
 		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.String(200, "RemiAq API is running! ver 5")
+			return re.String(200, "RemiAq API is running! ver 4")
 		})
 
 		// Raw SQL query endpoints

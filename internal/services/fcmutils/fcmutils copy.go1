@@ -1,0 +1,129 @@
+// package fcmutils
+
+// import (
+// 	"context"
+// 	"encoding/base64"
+// 	"fmt"
+
+// 	firebase "firebase.google.com/go/v4"
+// 	"firebase.google.com/go/v4/messaging"
+// 	"google.golang.org/api/option"
+// )
+
+// // Credentials đã mã hoá bằng base64 - thay thế bằng credentials mã hoá của bạn
+// // Để tạo: encodeBase64(nội dung firebase-credentials.json)
+// const encodedFirebaseCredentials1 = `ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAicXVhbi10aGFu
+// IiwKICAicHJpdmF0ZV9rZXlfaWQiOiAiYjU4NGNkYWM2YTBhZjY2Yjk2NjE1YjRjMzhlNzJjZDJk
+// MGVhZDJmOSIsCiAgInByaXZhdGVfa2V5IjogIi0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxu
+// TUlJRXZRSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NCS2N3Z2dTakFnRUFBb0lCQVFDeU13YlVi
+// Zytkd1BYeVxueEpGWTloZEtHWUJScDhxMWNqT3k5ZExIcG1XN1J4WnhjdXQ0a0xkNy9NditBTS9V
+// SFdJR0daY2I2UjlHeGtKZVxuWHVaOG9VQ0pSbElNSXkvQ21laEVJOUo3UHU4MEU1a1E0NUhWLzF0
+// NVVZMm5iV1RrMDBHQzhkRk1OZlUxaHcwQVxuYU1KcDZNc3JYOG1GR2gyOVlvZVhSdlhYdUJXYW04
+// Y2x2RWJSeXRPTlNERjN2aVl2bGxPcnRxWm5CN3ZqcFRFdFxuVVkxZGVMaGtwWmNrQzAvekNzSDhP
+// SE92bjBBNjZwaTJiczFhRlYvMmwrQ3dhazFieUpMampRUXc2Y0x3ejArOFxuVTlhMHhXYzdUT29R
+// L0FaczNZb1MzbVppYTg1ZHF6VVV6NTZDcE1EckF2aGlxODRDY3ErekVZM2hBbUcrZEd0Ulxua0lR
+// enJpWi9BZ01CQUFFQ2dnRUFSalBCQkk1SmU2b0ptcmJpMWV1NU9CbDh5bTV5ZHZJRE9RVU1JVmhG
+// NnJZeVxuT3NaOXlwVWttK1YzRGQyUEFxOENyNG1FVk53TjFNbUZXdjFEQ3lWUnNlTHdydFJyMjl2
+// Yk80RHJTbDk4U0FWU1xuZjJ0UHlFRWQ3ZGo1bDlTS2MzVmdjVEJIOXFDcE5nbTZ6d2IyVkZnQU5s
+// bTVuOFN1bzYzOTRkUjBSS1JDYXBJOFxuWjluRkoyb09tai9OMTBzdFNCUTNUUUphOHNTQ2tMS01W
+// NWg4M29nUmlHaVBHc0dqNG5VZGhuWXRxc0ZMeEI1Y1xuSmMzRkp6Q1FYRGpyVW9wV24yeDJFUkgz
+// dEVrVFBraGZQdkFtS2VIckcwemRPMjdUTExMY2xlVE1ORjZQMW5Sc1xuU2xUa1VmZllQV2wxUnVu
+// T2pPZFd5OUxERUNtOVNwOU12bU4zYXNXaWlRS0JnUURtY0hxbkQ1MWxRRjU1WTBNaFxuVGdmbGdj
+// RzBRSFJocVljZjZWc1FwU2s1RWN0L0w5T0RnWStON2pIQWVHLy9KSkMvbXNMZ0p5bWV5Ty9aUURo
+// eVxuNXJTa1lPQXdncHFmVm9BUk5Vc0JvUHBwTXhiVVFwN2FKVVFxd2c3eWl5ZXlucWI3Q1lXUHRl
+// QmlZN3ROaWJTUVxuQVRFUGptcmU3bXpCWnowRUUycmJQemJIOXdLQmdRREY5eVd1dUE2R1JJOW9z
+// bEs2S28yb2Vwb1l3ODhhcUZOZlxuUU43MVZ4c1d5b1BCWHExSGkrNDJQczJGbEtyRkVsZ0tkSXlB
+// RGswaUNleHVCeTN3cTQxVW8zSHYwREV3ZlR5Tlxuc1pVWUd0dFpDd2hReFJacWN1WXdXQkhQWmRP
+// Y2lxejJ6akdsQ0xRdmNCTjJDTm5xK0xTWG9SUVp3dnpaeXE0VVxuNmQvUmFzNUR1UUtCZ0V2aDdE
+// SEpMWTVqQlBrNkc2Z0M5d3kzanQ3WmZybU9Sc1hXWlR0MDk3OG9RZmV1K3hySlxuOWtqSmtDNk9P
+// bXN0VWxFV0dHZ1IzVjNCVTJJYUNMeWxoZ1MvTmZRamZlRk1iYjI4Nitjc2FHbHQvbTJGUnFRVlxu
+// TTM1VkN2RUpxOWZnOEtHb0FBaFQzd0RuVUkxMjlET2JnTmxiajR1N3ZhcHVZYVJPOUpnZ0Y5ei9B
+// b0dCQUxUdVxuajdoQ2JMUDIwWU9GQitzeW5Vb1EwK295ZklVR3R6eGwwK0V6L1lRMUQzcWFoNURP
+// cWFkV2V3ek50YzVzVjU4bVxucW9zWGh4UEhNaG5WNGYwSExpTGZSM0ZCUE5QdWdudVdoSWdGYzlq
+// TUpvdDd0bU1RSkthbXQ1QndwcGw2ZlY4TlxuVVg1ZW1DQ0xOSjQ2dE1EM0VrZExaMDJzVXVEVFI0
+// dkJ2Vmh2WDVteEFvR0FBa3BIUWh0UmhPbm1BL09UZCtPSlxuYnpZblRremZiemVlTVV5ZkI0V2xN
+// RW14aEpUU3NQNHA0aS95NjBzYXg3UkFXZWcxaWY1TEttWmdHbWU3dXplV1xuQkxHMzlVK3VWRnlO
+// dWUvVUNKRDlVNVA5TkcvdDB3YVBZTW1VL3lwdkxBY3dTQ1E0dDYrME44bGVYYmFzRUdoT1xucjR0
+// U2JFUUdRSHNTVlNTQzRoRE1QaG89XG4tLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tXG4iLAogICJj
+// bGllbnRfZW1haWwiOiAiZmlyZWJhc2UtYWRtaW5zZGstZmJzdmNAcXVhbi10aGFuLmlhbS5nc2Vy
+// dmljZWFjY291bnQuY29tIiwKICAiY2xpZW50X2lkIjogIjEwNDMxOTg5MjAyNzI3MjQzNTkyNyIs
+// CiAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRo
+// IiwKICAidG9rZW5fdXJpIjogImh0dHBzOi8vb2F1dGgyLmdvb2dsZWFwaXMuY29tL3Rva2VuIiwK
+// ICAiYXV0aF9wcm92aWRlcl94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMu
+// Y29tL29hdXRoMi92MS9jZXJ0cyIsCiAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8v
+// d3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvZmlyZWJhc2UtYWRtaW5z
+// ZGstZmJzdmMlNDBxdWFuLXRoYW4uaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAogICJ1bml2ZXJz
+// ZV9kb21haW4iOiAiZ29vZ2xlYXBpcy5jb20iCn0=`
+
+// // encodeBase64 - Hàm helper để mã hoá JSON thành base64
+// // Dùng trong quá trình chuẩn bị credentials
+// func encodeBase64(jsonString string) string {
+// 	return base64.StdEncoding.EncodeToString([]byte(jsonString))
+// }
+
+// // decodeBase64 - Giải mã credentials từ base64
+// func decodeBase641(encoded string) (string, error) {
+// 	decoded, err := base64.StdEncoding.DecodeString(encoded)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to decode credentials: %w", err)
+// 	}
+// 	return string(decoded), nil
+// }
+
+// // InitFirebaseApp khởi tạo Firebase Admin SDK từ credentials mã hoá base64
+// func InitFirebaseApp(ctx context.Context) (*firebase.App, error) {
+// 	// Giải mã credentials
+// 	credentialsJSON, err := decodeBase64(encodedFirebaseCredentials)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to decode credentials: %w", err)
+// 	}
+
+// 	opt := option.WithCredentialsJSON([]byte(credentialsJSON))
+// 	app, err := firebase.NewApp(ctx, nil, opt)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error initializing app: %w", err)
+// 	}
+// 	return app, nil
+// }
+
+// type MessagingClient interface {
+// 	Send(ctx context.Context, message *messaging.Message) (string, error)
+// }
+
+// // SendFCMNotification gửi một thông báo FCM đến một thiết bị cụ thể
+// func SendFCMNotification1(ctx context.Context, client MessagingClient, title, body, deviceToken string) (string, error) {
+// 	message := &messaging.Message{
+// 		Notification: &messaging.Notification{
+// 			Title: title,
+// 			Body:  body,
+// 		},
+// 		Token: deviceToken,
+// 	}
+
+// 	response, err := client.Send(ctx, message)
+// 	if err != nil {
+// 		return "", fmt.Errorf("error sending message: %w", err)
+// 	}
+
+// 	return response, nil
+// }
+
+// // SendNotificationCombined tự động khởi tạo Firebase App và gửi thông báo FCM
+// func SendNotificationCombined(ctx context.Context, title, body, deviceToken string) (string, error) {
+// 	app, err := InitFirebaseApp(ctx)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to initialize Firebase app: %w", err)
+// 	}
+
+// 	client, err := app.Messaging(ctx)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to get Firebase Messaging client: %w", err)
+// 	}
+
+// 	response, err := SendFCMNotification(ctx, client, title, body, deviceToken)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to send FCM notification: %w", err)
+// 	}
+
+// 	return response, nil
+// }

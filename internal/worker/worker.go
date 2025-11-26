@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"remiaq/internal/models"
+	"remiaq/internal/services/fcmutils"
 	"remiaq/internal/utils"
 )
 
@@ -65,7 +66,7 @@ func NewWorker(
 	sysRepo SystemStatusRepo,
 	reminderRepo ReminderRepo,
 	userRepo UserRepo,
-	fcmSender FCMSender,
+
 	schedCalc ScheduleCalc,
 	interval time.Duration,
 ) *Worker {
@@ -73,9 +74,9 @@ func NewWorker(
 		sysRepo:      sysRepo,
 		reminderRepo: reminderRepo,
 		userRepo:     userRepo,
-		fcmSender:    fcmSender,
-		schedCalc:    schedCalc,
-		interval:     interval,
+
+		schedCalc: schedCalc,
+		interval:  interval,
 	}
 }
 
@@ -444,26 +445,33 @@ func (w *Worker) sendNotification(ctx context.Context, reminder *models.Reminder
 		return fmt.Errorf("user FCM not active")
 	}
 
-	// Send FCM (no-op if not configured)
-	if w.fcmSender != nil {
-		log.Printf("4 before ")
-		err := w.fcmSender.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
-		log.Printf("5 after sendNotification: %v", err)
-		if err != nil {
-			// Check if token error
-			if isTokenError(err.Error()) {
-				log.Printf("411 sendNotification: token disabled: %v", err)
-				_ = w.userRepo.DisableFCM(ctx, user.ID)
-				return fmt.Errorf("token disabled: %w", err)
-			}
-			log.Printf("511 sendNotification: khong ro loi gi")
-			// System error
-			_ = w.userRepo.SetFCMError(ctx, user.ID, err.Error())
-			return fmt.Errorf("fcm system error: %w", err)
-		}
-	} else {
-		log.Printf("** sendNotification: fcmSender not configured")
+	log.Printf("zoooooooo 4 sendNotification: user FCM token: %s", user.FCMToken)
+	responFcm, err := fcmutils.SendFCMNotification(ctx, reminder.Title, reminder.Description, user.FCMToken)
+	if err != nil {
+		return fmt.Errorf("***** fcm system error: %w", err)
 	}
+	log.Printf("6 sendNotification: fcm response: %s", responFcm)
+
+	// Send FCM (no-op if not configured)
+	// if w.fcmSender != nil {
+	// 	log.Printf("4 before ")
+	// 	err := w.fcmSender.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
+	// 	log.Printf("5 after sendNotification: %v", err)
+	// 	if err != nil {
+	// 		// Check if token error
+	// 		if isTokenError(err.Error()) {
+	// 			log.Printf("411 sendNotification: token disabled: %v", err)
+	// 			_ = w.userRepo.DisableFCM(ctx, user.ID)
+	// 			return fmt.Errorf("token disabled: %w", err)
+	// 		}
+	// 		log.Printf("511 sendNotification: khong ro loi gi")
+	// 		// System error
+	// 		_ = w.userRepo.SetFCMError(ctx, user.ID, err.Error())
+	// 		return fmt.Errorf("fcm system error: %w", err)
+	// 	}
+	// } else {
+	// 	log.Printf("** sendNotification: fcmSender not configured")
+	// }
 
 	return nil
 }

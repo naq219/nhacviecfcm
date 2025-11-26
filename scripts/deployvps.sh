@@ -12,7 +12,7 @@ PM2_PATH="/root/.nvm/versions/node/v24.7.0/bin/pm2"
 # ---- KIỂM TRA TUỲ CHỌN ----
 BUILD=false
 for arg in "$@"; do
-    if [[ "$arg" == "--build" ]]; then
+    if [[ "$arg" == "--b" ]]; then
         BUILD=true
     fi
 done

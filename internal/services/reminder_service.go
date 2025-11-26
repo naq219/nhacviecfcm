@@ -22,13 +22,13 @@ type ReminderService struct {
 func NewReminderService(
 	reminderRepo repository.ReminderRepository,
 	userRepo repository.UserRepository,
-	fcmService FCMServiceInterface,
+
 	schedCalculator *ScheduleCalculator,
 ) *ReminderService {
 	return &ReminderService{
-		reminderRepo:    reminderRepo,
-		userRepo:        userRepo,
-		fcmService:      fcmService,
+		reminderRepo: reminderRepo,
+		userRepo:     userRepo,
+
 		schedCalculator: schedCalculator,
 	}
 }
