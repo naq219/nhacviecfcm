@@ -29,7 +29,7 @@ func (e *ValidationError) Error() string {
 // Load loads configuration from environment variables with validation
 func Load() (*Config, error) {
 	cfg := &Config{
-		ServerAddr:     getEnv("SERVER_ADDR", "127.0.0.1:8888"),
+		ServerAddr:     getEnv("SERVER_ADDR", "0.0.0.0:8888"),
 		WorkerInterval: getEnvInt("WORKER_INTERVAL", 10),
 		FCMCredentials: getEnv("FCM_CREDENTIALS", "./firebase-credentials.json"),
 		Environment:    getEnv("ENVIRONMENT", "development"),

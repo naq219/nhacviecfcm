@@ -31,6 +31,7 @@ type Reminder struct {
 	NextActionAt    time.Time `json:"next_action_at" db:"next_action_at"`
 	LastSentAt      time.Time `json:"last_sent_at" db:"last_sent_at"`
 	LastCompletedAt time.Time `json:"last_completed_at" db:"last_completed_at"`
+	From            string    `json:"from" db:"from"` // api_complete, user_click
 
 	// Snooze
 	SnoozeUntil time.Time `json:"snooze_until" db:"snooze_until"`

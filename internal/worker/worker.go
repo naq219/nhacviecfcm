@@ -140,7 +140,7 @@ func (w *Worker) runOnce(ctx context.Context) {
 		return
 	}
 
-	log.Printf("Worker: Processing %d due reminders", len(reminders))
+	//log.Printf("Worker: Processing %d due reminders", len(reminders))
 
 	// Track errors
 	systemErrorOccurred := false
@@ -163,9 +163,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 	}
 }
 
-// processReminder processes a single reminder (FRP + CRP logic)
-// processReminder processes a single reminder (FRP + CRP logic)
-// processReminder processes a single reminder (FRP + CRP logic)
 func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder, now time.Time) error {
 	// ========================================
 	// DEBUG: Log reminder state on load
@@ -182,12 +179,12 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 		return nil
 	}
 
-	log.Printf("📋 Loaded reminder %s: NextCRP=%v, LastSentAt=%v, CRPCount=%d, MaxCRP=%d",
-		reminder.ID,
-		reminder.NextCRP,
-		reminder.LastSentAt,
-		reminder.CRPCount,
-		reminder.MaxCRP)
+	// log.Printf("📋 Loaded reminder %s: NextCRP=%v, LastSentAt=%v, CRPCount=%d, MaxCRP=%d",
+	// 	reminder.ID,
+	// 	reminder.NextCRP,
+	// 	reminder.LastSentAt,
+	// 	reminder.CRPCount,
+	// 	reminder.MaxCRP)
 
 	// ========================================
 	// STEP 0: Check if snoozed
@@ -258,10 +255,11 @@ func (w *Worker) processReminder(ctx context.Context, reminder *models.Reminder,
 }
 
 func (w *Worker) processCRPForOneTime(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	log.Printf("🔔 Worker: CRP triggered for ONE-TIME %s (count: %d/%d)",
+	log.Printf("🔔🔔🔔 GỬI TIN NHẮN for ONE-TIME %s (count: %d/%d)",
 		reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
-
+	reminder.Description = fmt.Sprintf("%s (CRP) ONETIME {%d/%d} time: %s", reminder.Description, reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"))
 	if err := w.sendNotification(ctx, reminder); err != nil {
+		log.Printf("⚠️  GỬI LỖI RỒI : %v", err)
 		return err // Lỗi gửi → stop, retry lần sau
 	}
 
@@ -315,9 +313,12 @@ func (w *Worker) processCRPForOneTime(ctx context.Context, reminder *models.Remi
 // processFRP handles Father Recurrence Pattern trigger
 
 func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
+	//log.Printf("Worker: FRP triggered for reminder %s", reminder.ID)
 	reminder.SnoozeUntil = time.Time{} // ✅ Clear snooze
-
+	reminder.Description = fmt.Sprintf("%s (FRP) {%d/%d} time: %s now: %s", reminder.Description, reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"), time.Now().Format("15:04:05"))
+	log.Printf("** processFRP reminder.Description %s", reminder.Description)
+	log.Printf("** processFRP time %s", now.Format("15:04:05"))
+	log.Printf("** processFRP now %s", time.Now().Format("15:04:05"))
 	// Get user and send notification
 	if err := w.sendNotification(ctx, reminder); err != nil {
 		log.Printf("❌ FRP sendNotification failed for %s, snoozing 30s: %v", reminder.ID, err)
@@ -354,15 +355,13 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 	} else {
 		// For CRPUntilComplete, NextRecurring is only updated on user completion.
 		// We just log that it's not being advanced here.
-		log.Printf("📅 NextRecurring for CRPUntilComplete reminder %s not advanced by FRP trigger.", reminder.ID)
+		//log.Printf("📅 NextRecurring for CRPUntilComplete reminder %s not advanced by FRP trigger.", reminder.ID)
 	}
 
 	// Recalc next_action_at
 	reminder.NextActionAt = w.schedCalc.CalculateNextActionAt(reminder, now)
 	reminder.NextCRP = now.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
-	log.Printf("naq CRPIntervalSec: %d", reminder.CRPIntervalSec)
-	log.Printf("NextRecurring: %s", reminder.NextRecurring)
-	log.Printf("NextCRP: %s", reminder.NextCRP)
+
 	// Update DB
 	if err := w.reminderRepo.Update(ctx, reminder); err != nil {
 		return fmt.Errorf("failed to update reminder after FRP: %w", err)
@@ -375,8 +374,9 @@ func (w *Worker) processFRP(ctx context.Context, reminder *models.Reminder, now 
 // processCRP handles Child Repeat Pattern (retry) trigger
 // processCRP handles Child Repeat Pattern (retry) trigger
 func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now time.Time) error {
-	log.Printf("🔔 Worker: CRP triggered for reminder %s (count: %d/%d)", reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
-
+	log.Printf(" CRP 🔔🔔🔔 gửi tin nhắn for reminder %s (count: %d/%d)", reminder.ID, reminder.CRPCount+1, reminder.MaxCRP)
+	reminder.Description = fmt.Sprintf("%s (CRP) {%d/%d} time: %s now: %s", reminder.Description, reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"), time.Now().Format("15:04:05"))
+	log.Printf(fmt.Sprintf("%s (CRP) {%d/%d} time: %s now: %s", reminder.Description, reminder.CRPCount+1, reminder.MaxCRP, now.Format("15:04:05"), time.Now().Format("15:04:05")))
 	// Send notification
 	if err := w.sendNotification(ctx, reminder); err != nil {
 		return err
@@ -432,28 +432,37 @@ func (w *Worker) processCRP(ctx context.Context, reminder *models.Reminder, now 
 
 // sendNotification sends FCM notification to user
 func (w *Worker) sendNotification(ctx context.Context, reminder *models.Reminder) error {
+	log.Printf("1 func sendNotification for reminder %s", reminder.Description)
 	user, err := w.userRepo.GetByID(ctx, reminder.UserID)
 	if err != nil {
+		log.Printf("2 sendNotification: user not found: %v", err)
 		return fmt.Errorf("user not found: %w", err)
 	}
 
 	if !user.IsFCMActive || user.FCMToken == "" {
+		log.Printf("3 sendNotification: user FCM not active: %v", err)
 		return fmt.Errorf("user FCM not active")
 	}
 
 	// Send FCM (no-op if not configured)
 	if w.fcmSender != nil {
+		log.Printf("4 before ")
 		err := w.fcmSender.SendNotification(user.FCMToken, reminder.Title, reminder.Description)
+		log.Printf("5 after sendNotification: %v", err)
 		if err != nil {
 			// Check if token error
 			if isTokenError(err.Error()) {
+				log.Printf("411 sendNotification: token disabled: %v", err)
 				_ = w.userRepo.DisableFCM(ctx, user.ID)
 				return fmt.Errorf("token disabled: %w", err)
 			}
+			log.Printf("511 sendNotification: khong ro loi gi")
 			// System error
 			_ = w.userRepo.SetFCMError(ctx, user.ID, err.Error())
 			return fmt.Errorf("fcm system error: %w", err)
 		}
+	} else {
+		log.Printf("** sendNotification: fcmSender not configured")
 	}
 
 	return nil

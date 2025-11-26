@@ -210,6 +210,7 @@ func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 		// RESET CRP immediately (dù chưa đủ quota)
 		reminder.CRPCount = 0
 		reminder.LastCompletedAt = now
+		reminder.From = "api_complete"
 
 		// Calculate NEXT FRP from completion time
 		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)

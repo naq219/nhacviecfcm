@@ -68,8 +68,8 @@ export NVM_DIR="\$HOME/.nvm"
 chmod +x $REMOTE_PATH/$(basename $LOCAL_FILE)
 
 # restart pm2
-$PM2_PATH restart $PM2_NAME
-$PM2_PATH save
+#$PM2_PATH restart $PM2_NAME
+#$PM2_PATH save
 EOF
 
 echo "===> Deploy hoàn tất!"

@@ -83,6 +83,11 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 	pattern := reminder.RecurrencePattern
 	current := reminder.NextRecurring
 
+	// user click complete
+	if reminder.From == "api_complete" && pattern.Type == models.RecurrenceTypeIntervalSeconds {
+		return c.calculateNextIntervalSecondsFromApiComplete(current, pattern, now)
+	}
+
 	if reminder.CalendarType == models.CalendarTypeLunar {
 		nextLunar, err := FindNextLunarMonthly(now, pattern.DayOfMonth)
 		if err != nil {
@@ -149,6 +154,17 @@ func (c *ScheduleCalculator) calculateNextIntervalSeconds(current time.Time, pat
 	for !next.After(now) {
 		next = next.Add(interval)
 	}
+
+	return next, nil
+}
+
+func (c *ScheduleCalculator) calculateNextIntervalSecondsFromApiComplete(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
+	if pattern.IntervalSeconds <= 0 {
+		return time.Time{}, errors.New("interval_seconds must be > 0")
+	}
+	interval := time.Duration(pattern.IntervalSeconds) * time.Second
+	next := now
+	next = next.Add(interval)
 
 	return next, nil
 }
@@ -338,19 +354,19 @@ func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time
 
 	// Check quota: if MaxCRP > 0, must not exceed it
 	if reminder.MaxCRP > 0 && reminder.CRPCount >= reminder.MaxCRP {
-		log.Printf("🚫 CRP quota reached for reminder %s (%d/%d)", reminder.ID, reminder.CRPCount, reminder.MaxCRP)
+		//log.Printf("🚫 CRP quota reached for reminder %s (%d/%d)", reminder.ID, reminder.CRPCount, reminder.MaxCRP)
 		return false
 	}
 
 	// ========================================
 	// DEBUG: Log current state
 	// ========================================
-	log.Printf("🔍 CanSendCRP debug for %s: NextCRP=%s, LastSentAt=%s, IsNextCRPSet=%v, IsLastSentAtSet=%v",
-		reminder.ID,
-		reminder.NextCRP.Format("15:04:05"),
-		reminder.LastSentAt.Format("15:04:05"),
-		reminder.IsNextCRPSet(),
-		reminder.IsLastSentAtSet())
+	// log.Printf("🔍 CanSendCRP debug for %s: NextCRP=%s, LastSentAt=%s, IsNextCRPSet=%v, IsLastSentAtSet=%v",
+	// 	reminder.ID,
+	// 	reminder.NextCRP.Format("15:04:05"),
+	// 	reminder.LastSentAt.Format("15:04:05"),
+	// 	reminder.IsNextCRPSet(),
+	// 	reminder.IsLastSentAtSet())
 
 	// ========================================
 	// CRITICAL FIX: Check NextCRP (set by processCRP)
@@ -367,11 +383,11 @@ func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time
 		// Fallback: recalculate from LastSentAt
 		nextCRP := reminder.LastSentAt.Add(time.Duration(reminder.CRPIntervalSec) * time.Second)
 		if now.Before(nextCRP) {
-			remaining := nextCRP.Sub(now).Seconds()
-			log.Printf("⏳ CRP not ready (%.0fs remaining, fallback from LastSentAt)", remaining)
+			//remaining := nextCRP.Sub(now).Seconds()
+			//log.Printf("⏳ CRP not ready (%.0fs remaining, fallback from LastSentAt)", remaining)
 			return false
 		}
-		log.Printf("✅ CRP ready (fallback calc from LastSentAt)")
+		//log.Printf("✅ CRP ready (fallback calc from LastSentAt)")
 		return true
 	}
 
@@ -379,14 +395,10 @@ func (c *ScheduleCalculator) CanSendCRP(reminder *models.Reminder, now time.Time
 	// NORMAL CASE: NextCRP is properly set
 	// ========================================
 	if now.Before(reminder.NextCRP) { //chưa đủ thời gian crp
-		remaining := reminder.NextCRP.Sub(now).Seconds()
-		log.Printf("⏳ CRP not ready yet for reminder %s (%.1fs remaining, next_crp=%s)",
-			reminder.ID, remaining, reminder.NextCRP.Format("15:04:05"))
+
 		return false
 	}
 
-	log.Printf("✅ CRP ready for reminder %s (now=%s >= next_crp=%s)",
-		reminder.ID, now.Format("15:04:05"), reminder.NextCRP.Format("15:04:05"))
 	return true
 }
 
