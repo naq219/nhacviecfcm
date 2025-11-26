@@ -87,6 +87,12 @@ func (r *WorkerReminderRepo) reminderToRecord(reminder *models.Reminder, record 
 		record.Set("next_action_at", nil)
 	}
 
+	if !reminder.NextRecurring.IsZero() {
+		record.Set("next_recurring", reminder.NextRecurring)
+	} else {
+		record.Set("next_recurring", nil)
+	}
+
 	return nil
 }
 
@@ -149,6 +155,122 @@ func (r *WorkerReminderRepo) GetOneTimeRetry(ctx context.Context, now time.Time)
 		"status":             models.ReminderStatusActive,
 		"is_sended_one_time": true,
 	}, now, "next_crp", dbx.NewExp("max_crp > 0"), dbx.NewExp("crp_count < max_crp"))
+}
+
+// 4. Lặp lại - không có CRP - không có crp_until_complete
+// - type = recurring
+// - status = active
+// - max_crp = 0
+// - repeat_strategy = none
+// - next_recurring <= now()
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringNoCRP(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchReminders(ctx, dbx.HashExp{
+		"type":            models.ReminderTypeRecurring,
+		"status":          models.ReminderStatusActive,
+		"max_crp":         0,
+		"repeat_strategy": models.RepeatStrategyNone,
+	}, now, "next_recurring")
+}
+
+// 5.1. Lặp lại - có CRP - không có crp_until_complete - FRP trigger
+// - type = recurring
+// - status = active
+// - max_crp > 0
+// - repeat_strategy = none
+// - next_recurring <= now()   (Changed from < to <= to match time exactly)
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringCRPTrigger(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchReminders(ctx, dbx.HashExp{
+		"type":            models.ReminderTypeRecurring,
+		"status":          models.ReminderStatusActive,
+		"repeat_strategy": models.RepeatStrategyNone,
+	}, now, "next_recurring", dbx.NewExp("max_crp > 0"))
+}
+
+// 5.2. Lặp lại - có CRP - không có crp_until_complete - CRP retry
+// - type = recurring
+// - status = active
+// - max_crp > 0
+// - repeat_strategy = none
+// - next_recurring > now()
+// - crp_count < max_crp
+// - next_crp <= now()
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringCRPRetry(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	// This case is special: we check next_crp <= now, but next_recurring > now
+	return r.fetchRemindersCustom(ctx, dbx.HashExp{
+		"type":            models.ReminderTypeRecurring,
+		"status":          models.ReminderStatusActive,
+		"repeat_strategy": models.RepeatStrategyNone,
+	}, now,
+		dbx.NewExp("max_crp > 0"),
+		dbx.NewExp("crp_count < max_crp"),
+		dbx.NewExp("next_crp <= {:now}", dbx.Params{"now": now}),
+		dbx.NewExp("next_recurring > {:now}", dbx.Params{"now": now}),
+		dbx.NewExp("(snooze_until IS NULL OR snooze_until = '' OR snooze_until <= {:now})", dbx.Params{"now": now}))
+}
+
+// Helper for custom conditions (for case 5.2)
+func (r *WorkerReminderRepo) fetchRemindersCustom(ctx context.Context, baseCond dbx.HashExp, now time.Time, extraConds ...dbx.Expression) ([]*models.Reminder, error) {
+	var records []struct {
+		ID                 string         `db:"id"`
+		UserID             string         `db:"user_id"`
+		Title              string         `db:"title"`
+		Description        string         `db:"description"`
+		Tag                string         `db:"tag"`
+		Type               string         `db:"type"`
+		CalendarType       string         `db:"calendar_type"`
+		NextRecurring      string         `db:"next_recurring"`
+		NextCRP            string         `db:"next_crp"`
+		NextActionAt       string         `db:"next_action_at"`
+		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
+		CRPIntervalSec     int            `db:"crp_interval_sec"`
+		MaxCRP             int            `db:"max_crp"`
+		CRPCount           int            `db:"crp_count"`
+		LastCRPCompletedAt string         `db:"last_crp_completed_at"`
+		RepeatStrategy     string         `db:"repeat_strategy"`
+		Status             string         `db:"status"`
+		SnoozeUntil        string         `db:"snooze_until"`
+		LastSentAt         string         `db:"last_sent_at"`
+		LastCompletedAt    string         `db:"last_completed_at"`
+		Created            string         `db:"created"`
+		Updated            string         `db:"updated"`
+		IsSendedOneTime    bool           `db:"is_sended_one_time"`
+	}
+
+	q := r.app.DB().Select("*").From("reminders").Where(baseCond)
+	for _, cond := range extraConds {
+		q.AndWhere(cond)
+	}
+
+	if err := q.All(&records); err != nil {
+		return nil, err
+	}
+
+	reminders := make([]*models.Reminder, 0, len(records))
+	for _, rec := range records {
+		reminder := &models.Reminder{
+			ID:              rec.ID,
+			UserID:          rec.UserID,
+			Title:           rec.Title,
+			Description:     rec.Description,
+			Type:            rec.Type,
+			Status:          rec.Status,
+			IsSendedOneTime: rec.IsSendedOneTime,
+			MaxCRP:          rec.MaxCRP,
+			CRPCount:        rec.CRPCount,
+			CRPIntervalSec:  rec.CRPIntervalSec,
+			RepeatStrategy:  rec.RepeatStrategy,
+			NextRecurring:   parseTime(rec.NextRecurring),
+			NextActionAt:    parseTime(rec.NextActionAt),
+			NextCRP:         parseTime(rec.NextCRP),
+			SnoozeUntil:     parseTime(rec.SnoozeUntil),
+		}
+		reminders = append(reminders, reminder)
+	}
+
+	return reminders, nil
 }
 
 // Helper to fetch reminders with common conditions
