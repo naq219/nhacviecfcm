@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -22,30 +23,6 @@ import (
 	// Import migrations package để PocketBase load migrations
 	_ "remiaq/migrations"
 )
-
-//	@title			RemiAq API
-//	@version		1.0
-//	@description	RemiAq - Reminder & Lunar Calendar API
-//	@termsOfService	http://swagger.io/terms/
-
-//	@contact.name	API Support
-//	@contact.url	http://www.swagger.io/support
-//	@contact.email	support@swagger.io
-
-//	@license.name	Apache 2.0
-//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
-
-//	@host		localhost:8090
-//	@basePath	/
-//	@schemes	http https
-
-//	@securityDefinitions.basic	BasicAuth
-//	@securityDefinitions.apikey	BearerAuth
-//	@in							header
-//	@name						Authorization
-
-//	@externalDocs.description	OpenAPI
-//	@externalDocs.url			https://swagger.io/resources/open-api/
 
 func main() {
 
@@ -75,6 +52,7 @@ func main() {
 	// Create PocketBase instance
 	app := pocketbase.New()
 
+	log.SetOutput(io.Discard)
 	// Initialize repositories (using ORM implementations)
 	reminderRepo := pbRepo.NewReminderORMRepo(app)
 	userRepo := pbRepo.NewUserORMRepo(app)
@@ -126,15 +104,28 @@ func main() {
 		time.Duration(cfg.WorkerInterval)*time.Second,
 	)
 
+	workerLoopNOUT := worker.NewWorkerLoopNoUT(
+		workerRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+	)
+
 	go func() {
-		time.Sleep(13 * time.Second) // Chờ app ready
+		time.Sleep(4 * time.Second) // Chờ app ready
+		app.Logger().Info("Starting background worker.. innfo")
+		// hoặc
+		app.Logger().Debug("Starting background worker...debug")
+
+		app.Logger().Warn("Starting background worker.warn..")
+
 		w.Start(bgCtx)
 		wOneTimeV2.Start(bgCtx)
-		//os.Exit(0)
+		workerLoopNOUT.Start(bgCtx)
 	}()
 
 	// Setup routes
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+
 		// Handle preflight OPTIONS requests
 		se.Router.OPTIONS("/*", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
