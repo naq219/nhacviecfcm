@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -52,7 +51,9 @@ func main() {
 	// Create PocketBase instance
 	app := pocketbase.New()
 
-	log.SetOutput(io.Discard)
+	// Note: PocketBase manages DB logging internally
+	// To reduce SQL query logs, set PB_DEBUG=false (already done above)
+
 	// Initialize repositories (using ORM implementations)
 	reminderRepo := pbRepo.NewReminderORMRepo(app)
 	userRepo := pbRepo.NewUserORMRepo(app)
@@ -99,12 +100,14 @@ func main() {
 	workerRepo := worker.NewWorkerReminderRepo(app)
 
 	wOneTimeV2 := worker.NewWorkerOneTimeV2(
+		app,
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,
 	)
 
 	workerLoopNOUT := worker.NewWorkerLoopNoUT(
+		app,
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,
@@ -112,11 +115,6 @@ func main() {
 
 	go func() {
 		time.Sleep(4 * time.Second) // Chờ app ready
-		app.Logger().Info("Starting background worker.. innfo")
-		// hoặc
-		app.Logger().Debug("Starting background worker...debug")
-
-		app.Logger().Warn("Starting background worker.warn..")
 
 		w.Start(bgCtx)
 		wOneTimeV2.Start(bgCtx)

@@ -3,11 +3,13 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"remiaq/internal/models"
 	"remiaq/internal/services/fcmutils"
+	"remiaq/internal/utils"
+
+	"github.com/pocketbase/pocketbase"
 )
 
 // WorkerLoopNoUT processes recurring reminders without "until complete" strategy
@@ -15,10 +17,12 @@ type WorkerLoopNoUT struct {
 	repo     *WorkerReminderRepo
 	userRepo UserRepo
 	interval time.Duration
+	logger   *utils.Logger
 }
 
 // NewWorkerLoopNoUT creates a new worker
 func NewWorkerLoopNoUT(
+	app *pocketbase.PocketBase,
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
@@ -27,6 +31,7 @@ func NewWorkerLoopNoUT(
 		repo:     repo,
 		userRepo: userRepo,
 		interval: interval,
+		logger:   utils.NewLogger(app, "WORKER_LOOP_NO_UT"),
 	}
 }
 
@@ -42,14 +47,14 @@ func (w *WorkerLoopNoUT) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	go func() {
 		defer ticker.Stop()
-		log.Printf("WorkerLoopNoUT started (interval=%s)", w.interval.String())
+		w.logger.Infof("Started (interval=%s)", w.interval.String())
 
 		for {
 			select {
 			case <-ticker.C:
 				w.runOnce(ctx)
 			case <-ctx.Done():
-				log.Println("WorkerLoopNoUT stopped")
+				w.logger.Info("Stopped")
 				return
 			}
 		}
@@ -61,32 +66,42 @@ func (w *WorkerLoopNoUT) runOnce(ctx context.Context) {
 
 	// Case 4: Recurring - No CRP
 	if err := w.processRecurringNoCRP(ctx, now); err != nil {
-		log.Printf("WorkerLoopNoUT: Error processing Recurring No CRP: %v", err)
+
+		w.logger.Errorf("Error processing Recurring No CRP: %v", err)
 	}
 
-	// Case 5.1: Recurring - With CRP - FRP trigger
+	// Case 5.1: Recurring - CRP Trigger
 	if err := w.processRecurringCRPTrigger(ctx, now); err != nil {
-		log.Printf("WorkerLoopNoUT: Error processing Recurring CRP Trigger: %v", err)
+		w.logger.Errorf("Error processing Recurring CRP Trigger: %v", err)
 	}
 
-	// Case 5.2: Recurring - With CRP - Retry
+	// Case 5.2: Recurring - CRP Retry
 	if err := w.processRecurringCRPRetry(ctx, now); err != nil {
-		log.Printf("WorkerLoopNoUT: Error processing Recurring CRP Retry: %v", err)
+		w.logger.Errorf("Error processing Recurring CRP Retry: %v", err)
 	}
 }
 
 // Case 4: Recurring - No CRP - No until_complete
 func (w *WorkerLoopNoUT) processRecurringNoCRP(ctx context.Context, now time.Time) error {
+
 	reminders, err := w.repo.GetRecurringNoCRP(ctx, now)
 	if err != nil {
 		return err
 	}
 
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase := w.logger.WithTag("##4---RecurringNoCRP")
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerLoopNoUT: Processing Recurring No CRP for %s", r.ID)
+		logCase.Infof("Processing ID=%s, Title=%s", r.ID, r.Title)
 
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
@@ -96,24 +111,34 @@ func (w *WorkerLoopNoUT) processRecurringNoCRP(ctx context.Context, now time.Tim
 		r.LastSentAt = now
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
+		} else {
+			logCase.Infof("✓ Sent, NextRecurring=%s ID=%s", r.NextRecurring.Format("15:04:05"), r.ID)
 		}
 	}
 	return nil
 }
 
-// Case 5.1: Recurring - With CRP - FRP trigger
+// Case 5.1: Recurring - CRP Trigger (FRP)
 func (w *WorkerLoopNoUT) processRecurringCRPTrigger(ctx context.Context, now time.Time) error {
+	logCase := w.logger.WithTag("Case5.1_RecurringCRPTrigger")
+
 	reminders, err := w.repo.GetRecurringCRPTrigger(ctx, now)
 	if err != nil {
 		return err
 	}
 
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerLoopNoUT: Processing Recurring CRP Trigger for %s", r.ID)
+		logCase.Infof("Processing ID=%s, Title=%s, MaxCRP=%d", r.ID, r.Title, r.MaxCRP)
 
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
@@ -127,24 +152,35 @@ func (w *WorkerLoopNoUT) processRecurringCRPTrigger(ctx context.Context, now tim
 		r.LastSentAt = now
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
+		} else {
+			logCase.Infof("✓ Sent FRP, NextRecurring=%s, NextCRP=%s ID=%s",
+				r.NextRecurring.Format("15:04:05"), r.NextCRP.Format("15:04:05"), r.ID)
 		}
 	}
 	return nil
 }
 
-// Case 5.2: Recurring - With CRP - Retry
+// Case 5.2: Recurring - CRP Retry
 func (w *WorkerLoopNoUT) processRecurringCRPRetry(ctx context.Context, now time.Time) error {
+	logCase := w.logger.WithTag("Case5.2_RecurringCRPRetry")
+
 	reminders, err := w.repo.GetRecurringCRPRetry(ctx, now)
 	if err != nil {
 		return err
 	}
 
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerLoopNoUT: Processing Recurring CRP Retry for %s (%d/%d)", r.ID, r.CRPCount+1, r.MaxCRP)
+		logCase.Infof("Processing ID=%s, CRP=%d/%d", r.ID, r.CRPCount+1, r.MaxCRP)
 
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
@@ -154,7 +190,13 @@ func (w *WorkerLoopNoUT) processRecurringCRPRetry(ctx context.Context, now time.
 		r.LastSentAt = now
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
+		} else {
+			if r.CRPCount >= r.MaxCRP {
+				logCase.Infof("✓ Sent CRP (quota reached), waiting for FRP ID=%s", r.ID)
+			} else {
+				logCase.Infof("✓ Sent CRP, NextCRP=%s ID=%s", r.NextCRP.Format("15:04:05"), r.ID)
+			}
 		}
 	}
 	return nil

@@ -3,22 +3,26 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"remiaq/internal/models"
 	"remiaq/internal/services/fcmutils"
+	"remiaq/internal/utils"
+
+	"github.com/pocketbase/pocketbase"
 )
 
 // WorkerOneTimeV2 processes one-time reminders
 type WorkerOneTimeV2 struct {
 	repo     *WorkerReminderRepo
-	userRepo UserRepo // Interface defined in worker.go
+	userRepo UserRepo
 	interval time.Duration
+	logger   *utils.Logger
 }
 
 // NewWorkerOneTimeV2 creates a new worker
 func NewWorkerOneTimeV2(
+	app *pocketbase.PocketBase,
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
@@ -27,6 +31,7 @@ func NewWorkerOneTimeV2(
 		repo:     repo,
 		userRepo: userRepo,
 		interval: interval,
+		logger:   utils.NewLogger(app, "WORKER_ONE_TIME_V2"),
 	}
 }
 
@@ -42,14 +47,14 @@ func (w *WorkerOneTimeV2) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	go func() {
 		defer ticker.Stop()
-		log.Printf("WorkerOneTimeV2 started (interval=%s)", w.interval.String())
+		w.logger.Infof("Started (interval=%s)", w.interval.String())
 
 		for {
 			select {
 			case <-ticker.C:
 				w.runOnce(ctx)
 			case <-ctx.Done():
-				log.Println("WorkerOneTimeV2 stopped")
+				w.logger.Info("Stopped")
 				return
 			}
 		}
@@ -61,29 +66,39 @@ func (w *WorkerOneTimeV2) runOnce(ctx context.Context) {
 
 	// 1. One Time - No CRP
 	if err := w.processNoCRP(ctx, now); err != nil {
-		log.Printf("WorkerOneTimeV2: Error processing NoCRP: %v", err)
+		w.logger.Errorf("Error processing NoCRP: %v", err)
 	}
 
 	// 2. One Time - First Send (CRP)
 	if err := w.processFirstSend(ctx, now); err != nil {
-		log.Printf("WorkerOneTimeV2: Error processing FirstSend: %v", err)
+		w.logger.Errorf("Error processing FirstSend: %v", err)
 	}
 
 	// 3. One Time - Retry (CRP)
 	if err := w.processRetry(ctx, now); err != nil {
-		log.Printf("WorkerOneTimeV2: Error processing Retry: %v", err)
+		w.logger.Errorf("Error processing Retry: %v", err)
 	}
 }
 
 func (w *WorkerOneTimeV2) processNoCRP(ctx context.Context, now time.Time) error {
+	logCase := w.logger.WithTag("Case1_NoCRP")
+
 	reminders, err := w.repo.GetOneTimeNoCRP(ctx, now)
 	if err != nil {
 		return err
 	}
+
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerOneTimeV2: Processing NoCRP for %s", r.ID)
+		logCase.Infof("Processing ID=%s, Title=%s", r.ID, r.Title)
+
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
@@ -91,30 +106,42 @@ func (w *WorkerOneTimeV2) processNoCRP(ctx context.Context, now time.Time) error
 		r.Status = models.ReminderStatusCompleted
 		r.LastCompletedAt = now
 		r.LastSentAt = now
-		r.NextActionAt = time.Time{} // Clear
+		r.NextActionAt = time.Time{}
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
+		} else {
+			logCase.Infof("✓ Completed ID=%s", r.ID)
 		}
 	}
 	return nil
 }
 
 func (w *WorkerOneTimeV2) processFirstSend(ctx context.Context, now time.Time) error {
+	logCase := w.logger.WithTag("Case2_FirstSend")
+
 	reminders, err := w.repo.GetOneTimeFirstSend(ctx, now)
 	if err != nil {
 		return err
 	}
+
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerOneTimeV2: Processing FirstSend for %s", r.ID)
+		logCase.Infof("Processing ID=%s, Title=%s, MaxCRP=%d", r.ID, r.Title, r.MaxCRP)
+
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
 		r.IsSendedOneTime = true
 		r.LastSentAt = now
-		// set next_crp = now() + crp_interval_sec
+
 		if r.CRPIntervalSec > 0 {
 			r.NextCRP = now.Add(time.Duration(r.CRPIntervalSec) * time.Second)
 		} else {
@@ -122,21 +149,33 @@ func (w *WorkerOneTimeV2) processFirstSend(ctx context.Context, now time.Time) e
 		}
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
+		} else {
+			logCase.Infof("✓ Sent, NextCRP=%s ID=%s", r.NextCRP.Format("15:04:05"), r.ID)
 		}
 	}
 	return nil
 }
 
 func (w *WorkerOneTimeV2) processRetry(ctx context.Context, now time.Time) error {
+	logCase := w.logger.WithTag("Case3_Retry")
+
 	reminders, err := w.repo.GetOneTimeRetry(ctx, now)
 	if err != nil {
 		return err
 	}
+
+	if len(reminders) == 0 {
+		return nil
+	}
+
+	logCase.Infof("Found %d reminders", len(reminders))
+
 	for _, r := range reminders {
-		log.Printf("WorkerOneTimeV2: Processing Retry for %s (%d/%d)", r.ID, r.CRPCount+1, r.MaxCRP)
+		logCase.Infof("Processing ID=%s, CRP=%d/%d", r.ID, r.CRPCount+1, r.MaxCRP)
+
 		if err := w.sendNotification(ctx, r); err != nil {
-			log.Printf("Failed to send notification for %s: %v", r.ID, err)
+			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
 
@@ -148,10 +187,13 @@ func (w *WorkerOneTimeV2) processRetry(ctx context.Context, now time.Time) error
 			r.Status = models.ReminderStatusCompleted
 			r.LastCompletedAt = now
 			r.NextActionAt = time.Time{}
+			logCase.Infof("✓ Completed (quota reached) ID=%s", r.ID)
+		} else {
+			logCase.Infof("✓ Sent retry, NextCRP=%s ID=%s", r.NextCRP.Format("15:04:05"), r.ID)
 		}
 
 		if err := w.repo.Update(ctx, r); err != nil {
-			log.Printf("Failed to update reminder %s: %v", r.ID, err)
+			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
 		}
 	}
 	return nil

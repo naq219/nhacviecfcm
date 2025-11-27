@@ -1,7 +1,7 @@
 {
     "info": {
         "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "name": "RemiAq API V2 - Complete Scenarios",
+        "name": "RemiAq API v4",
         "description": "Worker V2 - All 6 scenarios for ONE-TIME and RECURRING reminderswith FRP/CRP logic",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
