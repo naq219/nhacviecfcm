@@ -139,6 +139,10 @@ func init() {
 			Required: false,
 		})
 		remindersCollection.Fields.Add(&core.DateField{
+			Name:     "origin_time",
+			Required: false,
+		})
+		remindersCollection.Fields.Add(&core.DateField{
 			Name:     "last_sent_at",
 			Required: false,
 		})

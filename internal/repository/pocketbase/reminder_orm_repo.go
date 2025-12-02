@@ -42,6 +42,7 @@ func recordToReminder(record *core.Record) (*models.Reminder, error) {
 		NextRecurring:      record.GetDateTime("next_recurring").Time(),
 		NextCRP:            record.GetDateTime("next_crp").Time(),
 		NextActionAt:       record.GetDateTime("next_action_at").Time(),
+		OriginTime:         record.GetDateTime("origin_time").Time(),
 		CRPIntervalSec:     record.GetInt("crp_interval_sec"),
 		MaxCRP:             record.GetInt("max_crp"),
 		CRPCount:           record.GetInt("crp_count"),
@@ -94,6 +95,12 @@ func reminderToRecord(reminder *models.Reminder, record *core.Record) error {
 		record.Set("next_action_at", reminder.NextActionAt.Format(time.RFC3339Nano))
 	} else {
 		record.Set("next_action_at", nil)
+	}
+
+	if !reminder.OriginTime.IsZero() {
+		record.Set("origin_time", reminder.OriginTime.Format(time.RFC3339Nano))
+	} else {
+		record.Set("origin_time", nil)
 	}
 
 	record.Set("crp_interval_sec", reminder.CRPIntervalSec)
@@ -218,6 +225,7 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 		NextRecurring      string         `db:"next_recurring"`
 		NextCRP            string         `db:"next_crp"`
 		NextActionAt       string         `db:"next_action_at"`
+		OriginTime         string         `db:"origin_time"`
 		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
 		CRPIntervalSec     int            `db:"crp_interval_sec"`
 		MaxCRP             int            `db:"max_crp"`
@@ -264,6 +272,7 @@ func (r *ReminderORMRepo) GetDueReminders(ctx context.Context, beforeTime time.T
 			NextRecurring:      parseTimeDB(rec.NextRecurring),
 			NextCRP:            parseTimeDB(rec.NextCRP),
 			NextActionAt:       parseTimeDB(rec.NextActionAt),
+			OriginTime:         parseTimeDB(rec.OriginTime),
 			CRPIntervalSec:     rec.CRPIntervalSec,
 			MaxCRP:             rec.MaxCRP,
 			CRPCount:           rec.CRPCount,
@@ -305,6 +314,7 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 		NextRecurring      string         `db:"next_recurring"`
 		NextCRP            string         `db:"next_crp"`
 		NextActionAt       string         `db:"next_action_at"`
+		OriginTime         string         `db:"origin_time"`
 		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
 		CRPIntervalSec     int            `db:"crp_interval_sec"`
 		MaxCRP             int            `db:"max_crp"`
@@ -343,6 +353,7 @@ func (r *ReminderORMRepo) GetByUserID(ctx context.Context, userID string) ([]*mo
 			NextRecurring:      parseTimeDB(rec.NextRecurring),
 			NextCRP:            parseTimeDB(rec.NextCRP),
 			NextActionAt:       parseTimeDB(rec.NextActionAt),
+			OriginTime:         parseTimeDB(rec.OriginTime),
 			CRPIntervalSec:     rec.CRPIntervalSec,
 			MaxCRP:             rec.MaxCRP,
 			CRPCount:           rec.CRPCount,

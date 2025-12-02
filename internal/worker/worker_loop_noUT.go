@@ -18,6 +18,7 @@ import (
 type WorkerLoopNoUT struct {
 	repo     *WorkerReminderRepo
 	userRepo UserRepo
+	sysRepo  SystemStatusRepo
 	interval time.Duration
 	logger   *utils.Logger
 }
@@ -25,11 +26,13 @@ type WorkerLoopNoUT struct {
 // NewWorkerLoopNoUT creates a new worker
 func NewWorkerLoopNoUT(
 	app *pocketbase.PocketBase,
+	sysRepo SystemStatusRepo,
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
 ) *WorkerLoopNoUT {
 	return &WorkerLoopNoUT{
+		sysRepo:  sysRepo,
 		repo:     repo,
 		userRepo: userRepo,
 		interval: interval,
@@ -64,6 +67,9 @@ func (w *WorkerLoopNoUT) Start(ctx context.Context) {
 }
 
 func (w *WorkerLoopNoUT) runOnce(ctx context.Context) {
+	if !IsWorkerSystemEnabled(ctx, w.sysRepo, w.logger.Errorf) {
+		return
+	}
 	now := time.Now().UTC()
 
 	// Case 4: Recurring - No CRP

@@ -16,6 +16,7 @@ import (
 type WorkerOneTimeV2 struct {
 	repo     *WorkerReminderRepo
 	userRepo UserRepo
+	sysRepo  SystemStatusRepo
 	interval time.Duration
 	logger   *utils.Logger
 }
@@ -23,11 +24,13 @@ type WorkerOneTimeV2 struct {
 // NewWorkerOneTimeV2 creates a new worker
 func NewWorkerOneTimeV2(
 	app *pocketbase.PocketBase,
+	sysRepo SystemStatusRepo,
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
 ) *WorkerOneTimeV2 {
 	return &WorkerOneTimeV2{
+		sysRepo:  sysRepo,
 		repo:     repo,
 		userRepo: userRepo,
 		interval: interval,
@@ -62,6 +65,9 @@ func (w *WorkerOneTimeV2) Start(ctx context.Context) {
 }
 
 func (w *WorkerOneTimeV2) runOnce(ctx context.Context) {
+	if !IsWorkerSystemEnabled(ctx, w.sysRepo, w.logger.Errorf) {
+		return
+	}
 	now := time.Now().UTC()
 
 	// 1. One Time - No CRP

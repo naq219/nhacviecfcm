@@ -56,16 +56,16 @@ func Tinhtoan_NextRecurringV2(reminder models.Reminder, now time.Time) (time.Tim
 
 	// mỗi X seconds
 	if pattern.Type == models.RecurrenceTypeIntervalSeconds {
-		return calcNextIntervalSeconds(reminder, pattern.OriginTime, now)
+		return calcNextIntervalSeconds(reminder, reminder.OriginTime, now)
 	}
 
 	// Existing logic (daily, weekly, monthly, lunar)
 	switch pattern.Type {
 	case models.RecurrenceTypeDaily:
-		return calcNextDailyTime(reminder, pattern.OriginTime, now)
+		return calcNextDailyTime(reminder, reminder.OriginTime, now)
 
 	case models.RecurrenceTypeMonthly:
-		return calcNextSolarMonthly(reminder, pattern.OriginTime, now)
+		return calcNextSolarMonthly(reminder, reminder.OriginTime, now)
 	case models.RecurrenceTypeSolarLastDayOfMonth:
 		return calcNextSolarLastDayOfMonth(now)
 	default:
@@ -119,8 +119,8 @@ func calcNextSolarLastDayOfMonth(now time.Time) (time.Time, error) {
 
 func calcNextDailyTime(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
 	pattern := reminder.RecurrencePattern
-	interval := pattern.Interval     // số ngày lặp
-	originTime := pattern.OriginTime // thời gian bắt đầu
+	interval := pattern.Interval      // số ngày lặp
+	originTime := reminder.OriginTime // thời gian bắt đầu
 	if originTime.IsZero() {
 		return time.Time{}, errors.New("originTime required for daily reminder")
 	}
@@ -148,8 +148,8 @@ func calcNextDailyTime(reminder models.Reminder, lastTime time.Time, now time.Ti
 
 func calcNextSolarMonthly(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
 	pattern := reminder.RecurrencePattern
-	interval := pattern.Interval     // số tháng lặp
-	originTime := pattern.OriginTime // thời gian gốc (lấy ngày + giờ/phút)
+	interval := pattern.Interval      // số tháng lặp
+	originTime := reminder.OriginTime // thời gian gốc (lấy ngày + giờ/phút)
 	location := lastTime.Location()
 
 	originDay := originTime.Day()

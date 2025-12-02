@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"time"
 
@@ -57,6 +59,17 @@ func NewReminderHandler(reminderService ReminderServiceInterface) *ReminderHandl
 // @Router /api/reminders [post]
 func (h *ReminderHandler) CreateReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
+
+	//re.Request.Body
+	bodyBytes, _ := io.ReadAll(re.Request.Body)
+	re.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	log.Printf("REQ %s %s\nHeader: %v\nBody: %s",
+		re.Request.Method,
+		re.Request.URL.String(),
+		re.Request.Header,
+		string(bodyBytes),
+	)
 
 	authRecord := re.Auth
 	if authRecord == nil {
@@ -320,6 +333,10 @@ func validateReminderForCreate(reminder *models.Reminder) error {
 		// Validate recurrence pattern fields
 		if reminder.RecurrencePattern.Type == "" {
 			return errors.New("recurrence_pattern.type là bắt buộc")
+		}
+
+		if reminder.OriginTime.IsZero() {
+			return errors.New("origin_time là bắt buộc")
 		}
 
 		// Validate trigger time format if provided

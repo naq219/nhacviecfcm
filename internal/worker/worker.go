@@ -120,12 +120,8 @@ func (w *Worker) DoNoThing(ctx context.Context) {
 // runOnce processes a single worker cycle
 func (w *Worker) runOnce(ctx context.Context) {
 	// Check if enabled
-	enabled, err := w.sysRepo.IsWorkerEnabled(ctx)
-	if err != nil {
-		log.Printf("Worker: failed to check system status: %v", err)
-		return
-	}
-	if !enabled {
+	// Check if enabled
+	if !IsWorkerSystemEnabled(ctx, w.sysRepo, log.Printf) {
 		return
 	}
 

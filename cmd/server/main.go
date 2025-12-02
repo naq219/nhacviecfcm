@@ -101,6 +101,7 @@ func main() {
 
 	wOneTimeV2 := worker.NewWorkerOneTimeV2(
 		app,
+		sysRepo,
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,
@@ -108,6 +109,7 @@ func main() {
 
 	workerLoopNOUT := worker.NewWorkerLoopNoUT(
 		app,
+		sysRepo,
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,

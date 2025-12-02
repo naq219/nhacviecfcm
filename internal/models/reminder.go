@@ -29,6 +29,7 @@ type Reminder struct {
 
 	// Tracking
 	NextActionAt    time.Time `json:"next_action_at" db:"next_action_at"`
+	OriginTime      time.Time `json:"origin_time" db:"origin_time"`
 	LastSentAt      time.Time `json:"last_sent_at" db:"last_sent_at"`
 	LastCompletedAt time.Time `json:"last_completed_at" db:"last_completed_at"`
 	From            string    `json:"from" db:"from"` // api_complete, user_click
@@ -50,14 +51,13 @@ type Reminder struct {
 
 // RecurrencePattern defines how a reminder repeats
 type RecurrencePattern struct {
-	Type             string    `json:"type"` // daily, weekly, monthly, lunar_last_day_of_month
-	Interval         int       `json:"interval,omitempty"`
-	DayOfMonth       int       `json:"day_of_month,omitempty"`
-	DayOfWeek        int       `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
-	CalendarType     string    `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
-	TriggerTimeOfDay string    `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
-	IntervalSeconds  int       `json:"interval_seconds,omitempty"`    // ⭐ ADD THIS FIELD
-	OriginTime       time.Time `json:"origin_time,omitempty"`         // ⭐ ADD THIS FIELD
+	Type             string `json:"type"` // daily, weekly, monthly, lunar_last_day_of_month
+	Interval         int    `json:"interval,omitempty"`
+	DayOfMonth       int    `json:"day_of_month,omitempty"`
+	DayOfWeek        int    `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
+	CalendarType     string `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
+	TriggerTimeOfDay string `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
+	IntervalSeconds  int    `json:"interval_seconds,omitempty"`    // ⭐ ADD THIS FIELD
 
 }
 
