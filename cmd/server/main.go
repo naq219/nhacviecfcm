@@ -115,10 +115,12 @@ func main() {
 
 	go func() {
 		time.Sleep(4 * time.Second) // Chờ app ready
+		workerLoopNOUT.Start(bgCtx)
 
+		time.Sleep(4000 * time.Second)
 		w.Start(bgCtx)
 		wOneTimeV2.Start(bgCtx)
-		workerLoopNOUT.Start(bgCtx)
+
 	}()
 
 	// Setup routes
@@ -154,16 +156,6 @@ func main() {
 
 		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
 		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
-
-		// // --- Temporary/Public endpoints ---
-		// tmpApi := se.Router.Group("/api/tmp")
-		// tmpApi.POST("/reminders", reminderHandler.CreateReminder)
-		// tmpApi.GET("/reminders/{id}", reminderHandler.GetReminder)
-		// tmpApi.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
-		// tmpApi.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
-		// tmpApi.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
-		// tmpApi.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-		// tmpApi.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
 		// --- Auth-protected endpoints (PocketBase built-in auth) ---
 		api := se.Router.Group("/api")

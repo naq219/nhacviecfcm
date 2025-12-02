@@ -274,15 +274,6 @@ func (h *ReminderHandler) SnoozeReminder(re *core.RequestEvent) error {
 	return utils.SendSuccess(re, "Reminder snoozed successfully", nil)
 }
 
-// CompleteReminder handles POST /api/reminders/:id/complete
-// @Summary Complete a reminder
-// @Description Mark a reminder as completed
-// @Tags reminders
-// @Produce json
-// @Param id path string true "Reminder ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Router /api/reminders/{id}/complete [post]
 func (h *ReminderHandler) CompleteReminder(re *core.RequestEvent) error {
 	middleware.SetCORSHeaders(re)
 

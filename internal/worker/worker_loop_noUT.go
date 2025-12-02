@@ -9,6 +9,8 @@ import (
 	"remiaq/internal/services/fcmutils"
 	"remiaq/internal/utils"
 
+	"remiaq/internal/services"
+
 	"github.com/pocketbase/pocketbase"
 )
 
@@ -106,7 +108,11 @@ func (w *WorkerLoopNoUT) processRecurringNoCRP(ctx context.Context, now time.Tim
 		}
 
 		// Calculate next recurring time
-		nextRecurring := w.calculateNextRecurringTH4NoCrpNoUT(r, now)
+		nextRecurring, err := w.calculateNextRecurringTH4NoCrpNoUT(*r, now)
+		if err != nil {
+			logCase.Errorf("64577 Calculate next recurring failed ID=%s: %v", r.ID, err)
+			continue
+		}
 		r.NextRecurring = nextRecurring
 		r.LastSentAt = now
 
@@ -143,7 +149,11 @@ func (w *WorkerLoopNoUT) processRecurringCRPTrigger(ctx context.Context, now tim
 		}
 
 		// Calculate next recurring time
-		nextRecurring := w.calculateNextRecurringTH4YesCrpNoUT(r, now)
+		nextRecurring, err := w.calculateNextRecurringTH4YesCrpNoUT(*r, now)
+		if err != nil {
+			logCase.Errorf("75577 Calculate next recurring failed ID=%s: %v", r.ID, err)
+			continue
+		}
 		r.NextRecurring = nextRecurring
 
 		// Reset CRP cycle
@@ -214,15 +224,69 @@ func (w *WorkerLoopNoUT) sendNotification(ctx context.Context, reminder *models.
 	return err
 }
 
-// Placeholder calculation functions - implement based on your recurrence pattern logic
-func (w *WorkerLoopNoUT) calculateNextRecurringTH4NoCrpNoUT(r *models.Reminder, now time.Time) time.Time {
-	// TODO: Implement based on RecurrencePattern
-	// For now, return a simple daily increment
-	return now.Add(24 * time.Hour)
+// calculateNextRecurringTH4NoCrpNoUT calculates next recurring time for Case 4 (No CRP, No UT)
+// Based on RecurrencePattern - handles daily, weekly, monthly (solar/lunar), interval_seconds
+
+func (w *WorkerLoopNoUT) calculateNextRecurringTH4NoCrpNoUT(r models.Reminder, now time.Time) (time.Time, error) {
+	return services.Tinhtoan_NextRecurringV2(r, now)
 }
 
-func (w *WorkerLoopNoUT) calculateNextRecurringTH4YesCrpNoUT(r *models.Reminder, now time.Time) time.Time {
-	// TODO: Implement based on RecurrencePattern
-	// For now, return a simple daily increment
-	return now.Add(24 * time.Hour)
+// func (w *WorkerLoopNoUT) calculateNextRecurringTH4NoCrpNoUT(r *models.Reminder, now time.Time) time.Time {
+// 	if r.RecurrencePattern == nil {
+// 		w.logger.Errorf("RecurrencePattern is nil for reminder %s", r.ID)
+// 		return now.Add(24 * time.Hour) // Fallback
+// 	}
+
+// 	pattern := r.RecurrencePattern
+// 	current := r.NextRecurring
+
+// 	// If current is zero, initialize to now
+// 	if current.IsZero() {
+// 		current = now
+// 	}
+
+// 	switch pattern.Type {
+// 	case models.RecurrenceTypeDaily:
+// 		return w.calculateNextDaily(current, pattern, now)
+// 	case models.RecurrenceTypeWeekly:
+// 		return w.calculateNextWeekly(current, pattern, now)
+// 	case models.RecurrenceTypeMonthly:
+// 		if r.CalendarType == models.CalendarTypeLunar {
+// 			// For lunar monthly, use a simple fallback (proper lunar calc requires lunar calendar service)
+// 			return now.Add(30 * 24 * time.Hour)
+// 		}
+// 		return w.calculateNextSolarMonthly(current, pattern, now)
+// 	case models.RecurrenceTypeIntervalSeconds:
+// 		return w.calculateNextIntervalSeconds(current, pattern, now)
+// 	case models.RecurrenceTypeLunarLastDayOfMonth:
+// 		// Fallback for lunar last day
+// 		return now.Add(30 * 24 * time.Hour)
+// 	default:
+// 		w.logger.Errorf("Unsupported recurrence type: %s", pattern.Type)
+// 		return now.Add(24 * time.Hour) // Fallback
+// 	}
+// }
+
+func (w *WorkerLoopNoUT) calculateNextRecurringTH4YesCrpNoUT(r models.Reminder, now time.Time) (time.Time, error) {
+	// Same logic as TH4NoCrpNoUT - calculate next FRP based on pattern
+	return w.calculateNextRecurringTH4NoCrpNoUT(r, now)
+}
+
+// ========================================
+// Helper calculation functions
+// ========================================
+
+// calculateNextDaily adds interval days and finds first occurrence > now
+
+// calculateNextWeekly finds next target weekday
+
+// calculateNextSolarMonthly adds interval months on day_of_month
+
+// parseTimeOfDay parses HH:MM format
+func parseTimeOfDay(timeStr string) (time.Time, error) {
+	t, err := time.Parse("15:04", timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid time format, expected HH:MM")
+	}
+	return t, nil
 }

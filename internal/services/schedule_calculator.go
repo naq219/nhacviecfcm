@@ -143,6 +143,46 @@ func (c *ScheduleCalculator) CalculateNextRecurring(reminder *models.Reminder, n
 	}
 }
 
+func FindNextLunarMonthlyV2(reminder *models.Reminder, now time.Time) (time.Time, error) {
+	return time.Time{}, nil
+}
+
+// func tinhtoan_NextRecurringV211(reminder *models.Reminder, now time.Time) (time.Time, error) {
+// 	if reminder.RecurrencePattern == nil {
+// 		return time.Time{}, errors.New("recurrence_pattern required for recurring reminder")
+// 	}
+
+// 	// user click complete đi chỗ khác chơi
+// 	if reminder.From == "api_complete" {
+// 		return tinhtoan_NextRecurringV2_fromapi(reminder, now)
+// 	}
+
+// 	if reminder.CalendarType == models.CalendarTypeLunar {
+// 		return calNextLunarMonthly(reminder, now)
+// 	}
+
+// 	// chỉ trường hợp lặp không UT
+// 	//
+
+// 	if pattern.Type == models.RecurrenceTypeIntervalSeconds {
+// 		return calNextIntervalSeconds(reminder, now)
+// 	}
+
+// 	// Existing logic (daily, weekly, monthly, lunar)
+// 	switch pattern.Type {
+// 	case models.RecurrenceTypeDaily:
+// 		return calNextDaily(reminder, now)
+// 	case models.RecurrenceTypeWeekly:
+// 		return calNextWeekly(reminder, now)
+// 	case models.RecurrenceTypeMonthly:
+// 		return calNextSolarMonthly(reminder, now)
+// 	case models.RecurrenceTypeSolarLastDayOfMonth:
+// 		return calNextSolarLastDayOfMonth(reminder, now)
+// 	default:
+// 		return time.Time{}, errors.New("unsupported recurrence type")
+// 	}
+// }
+
 func (c *ScheduleCalculator) calculateNextIntervalSeconds(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
 	if pattern.IntervalSeconds <= 0 {
 		return time.Time{}, errors.New("interval_seconds must be > 0")
@@ -158,6 +198,7 @@ func (c *ScheduleCalculator) calculateNextIntervalSeconds(current time.Time, pat
 	return next, nil
 }
 
+// khi user click complete và lặp kiểu interval_seconds
 func (c *ScheduleCalculator) calculateNextIntervalSecondsFromApiComplete(current time.Time, pattern *models.RecurrencePattern, now time.Time) (time.Time, error) {
 	if pattern.IntervalSeconds <= 0 {
 		return time.Time{}, errors.New("interval_seconds must be > 0")

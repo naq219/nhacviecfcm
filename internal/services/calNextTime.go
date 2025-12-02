@@ -1,0 +1,205 @@
+package services
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"remiaq/internal/models"
+)
+
+func Tinhtoan_NextRecurringV2_fromapi(reminder models.Reminder, now time.Time) (time.Time, error) {
+
+	// user click complete đi chỗ khác chơi
+	if reminder.From != "api_complete" {
+		return time.Time{}, errors.New("không phải gọi từ api!!")
+	}
+
+	pattern := reminder.RecurrencePattern
+
+	switch pattern.Type {
+	case models.RecurrenceTypeDaily:
+		return calcNextDailyTime(reminder, now, now)
+	case models.RecurrenceTypeMonthly:
+		return calcNextSolarMonthly(reminder, now, now)
+	case models.RecurrenceTypeSolarLastDayOfMonth:
+		return calcNextSolarLastDayOfMonth(now)
+	case models.RecurrenceTypeIntervalSeconds:
+		return calcNextIntervalSeconds(reminder, now, now)
+	default:
+		return time.Time{}, errors.New("unsupported recurrence type31235")
+	}
+
+}
+func Tinhtoan_NextRecurringV2(reminder models.Reminder, now time.Time) (time.Time, error) {
+	if reminder.RecurrencePattern == nil {
+
+		return time.Time{}, errors.New("recurrence_pattern required for recurring reminder")
+	}
+
+	pattern := reminder.RecurrencePattern
+
+	// user click complete đi chỗ khác chơi
+	if reminder.From == "api_complete" {
+		return time.Time{}, errors.New("gọi sai chỗ rồi")
+	}
+
+	// hàng x tháng âm lịch
+	if reminder.CalendarType == models.CalendarTypeLunar {
+		//return calcNextLunarMonthly(reminder, now)
+		//todo
+		return time.Time{}, errors.New("Chưa triển khai")
+	}
+
+	// chỉ trường hợp lặp không UT tại vì có UT thì không cần tính toán
+	//
+
+	// mỗi X seconds
+	if pattern.Type == models.RecurrenceTypeIntervalSeconds {
+		return calcNextIntervalSeconds(reminder, pattern.OriginTime, now)
+	}
+
+	// Existing logic (daily, weekly, monthly, lunar)
+	switch pattern.Type {
+	case models.RecurrenceTypeDaily:
+		return calcNextDailyTime(reminder, pattern.OriginTime, now)
+
+	case models.RecurrenceTypeMonthly:
+		return calcNextSolarMonthly(reminder, pattern.OriginTime, now)
+	case models.RecurrenceTypeSolarLastDayOfMonth:
+		return calcNextSolarLastDayOfMonth(now)
+	default:
+		return time.Time{}, errors.New("unsupported recurrence type")
+	}
+}
+
+func calcNextIntervalSeconds(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
+	intervalSeconds := reminder.RecurrencePattern.IntervalSeconds
+	if intervalSeconds <= 0 {
+		return time.Time{}, fmt.Errorf("intervalSeconds must be > 0")
+	}
+
+	nextTime := lastTime.Add(time.Duration(intervalSeconds) * time.Second)
+
+	// trường hợp hệ thống bị stop quá lâu, khi quay lại thì dù có cộng thêm vẫn chưa quá now
+	for !nextTime.After(now) {
+		nextTime = nextTime.Add(time.Duration(intervalSeconds) * time.Second)
+	}
+
+	return nextTime, nil
+}
+func calcNextSolarLastDayOfMonth(now time.Time) (time.Time, error) {
+	location := now.Location()
+
+	// ngày cuối tháng hiện tại
+	lastDayThisMonth := time.Date(
+		now.Year(),
+		now.Month()+1,
+		0,
+		now.Hour(), now.Minute(), now.Second(), now.Nanosecond(),
+		location,
+	)
+
+	// nếu hôm nay chưa phải ngày cuối tháng → trả về cuối tháng này
+	if now.Day() < lastDayThisMonth.Day() {
+		return lastDayThisMonth, nil
+	}
+
+	// nếu hôm nay là ngày cuối tháng → trả về ngày cuối tháng sau
+	lastDayNextMonth := time.Date(
+		now.Year(),
+		now.Month()+2, // tháng sau + 1
+		0,
+		now.Hour(), now.Minute(), now.Second(), now.Nanosecond(),
+		location,
+	)
+
+	return lastDayNextMonth, nil
+}
+
+func calcNextDailyTime(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
+	pattern := reminder.RecurrencePattern
+	interval := pattern.Interval     // số ngày lặp
+	originTime := pattern.OriginTime // thời gian bắt đầu
+	originHour := originTime.Hour()
+	originMinute := originTime.Minute()
+
+	// tạo thời điểm lặp đầu tiên từ baseTime với giờ/phút chuẩn
+	nextTime := time.Date(
+		lastTime.Year(), lastTime.Month(), lastTime.Day(),
+		originHour, originMinute, 0, 0,
+		lastTime.Location(),
+	)
+
+	// cộng ít nhất interval ngày
+	nextTime = nextTime.AddDate(0, 0, interval)
+
+	// nếu vẫn chưa vượt qua `now` thì cộng tiếp theo interval
+	for !nextTime.After(now) {
+		nextTime = nextTime.AddDate(0, 0, interval)
+	}
+
+	return nextTime, nil
+
+}
+
+func calcNextSolarMonthly(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
+	pattern := reminder.RecurrencePattern
+	interval := pattern.Interval     // số tháng lặp
+	originTime := pattern.OriginTime // thời gian gốc (lấy ngày + giờ/phút)
+	location := lastTime.Location()
+
+	originDay := originTime.Day()
+	originHour := originTime.Hour()
+	originMinute := originTime.Minute()
+
+	// 1) Bắt đầu từ lastTime, tạo mốc ngày-tháng-năm nhưng giữ nguyên ngày/giờ của originTime
+	nextTime := time.Date(
+		lastTime.Year(),
+		lastTime.Month(),
+		originDay,
+		originHour, originMinute, 0, 0,
+		location,
+	)
+
+	// 2) Cộng ít nhất 1 interval tháng
+	nextTime = nextTime.AddDate(0, interval, 0)
+
+	// 3) Điều chỉnh nếu tháng đó không đủ ngày
+	lastDay := time.Date(nextTime.Year(), nextTime.Month()+1, 0, 0, 0, 0, 0, location).Day()
+
+	if originDay > lastDay {
+		// tháng sau không có ngày originDay → dùng ngày cuối tháng
+		nextTime = time.Date(
+			nextTime.Year(),
+			nextTime.Month(),
+			lastDay,
+			originHour, originMinute, 0, 0,
+			location,
+		)
+	} else {
+		// tháng sau có đủ ngày → giữ nguyên ngày
+		nextTime = time.Date(
+			nextTime.Year(),
+			nextTime.Month(),
+			originDay,
+			originHour, originMinute, 0, 0,
+			location,
+		)
+	}
+
+	// 4) Nếu vẫn chưa vượt now → cộng thêm interval tháng cho tới khi > now
+	for !nextTime.After(now) {
+		nextTime = nextTime.AddDate(0, interval, 0)
+
+		lastDay = time.Date(nextTime.Year(), nextTime.Month()+1, 0, 0, 0, 0, 0, location).Day()
+
+		if originDay > lastDay {
+			nextTime = time.Date(nextTime.Year(), nextTime.Month(), lastDay, originHour, originMinute, 0, 0, location)
+		} else {
+			nextTime = time.Date(nextTime.Year(), nextTime.Month(), originDay, originHour, originMinute, 0, 0, location)
+		}
+	}
+
+	return nextTime, nil
+}

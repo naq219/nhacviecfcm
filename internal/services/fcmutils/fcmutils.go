@@ -153,14 +153,14 @@ func SendFCMNotification(ctx context.Context, title, body, deviceToken, userName
 	// Tạo request
 	req, err := http.NewRequest("POST", "http://localhost:404/send-fcm", bytes.NewBuffer(jsonData))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// Gửi request
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	defer resp.Body.Close()
 

@@ -50,13 +50,14 @@ type Reminder struct {
 
 // RecurrencePattern defines how a reminder repeats
 type RecurrencePattern struct {
-	Type             string `json:"type"` // daily, weekly, monthly, lunar_last_day_of_month
-	Interval         int    `json:"interval,omitempty"`
-	DayOfMonth       int    `json:"day_of_month,omitempty"`
-	DayOfWeek        int    `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
-	CalendarType     string `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
-	TriggerTimeOfDay string `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
-	IntervalSeconds  int    `json:"interval_seconds,omitempty"`    // ⭐ ADD THIS FIELD
+	Type             string    `json:"type"` // daily, weekly, monthly, lunar_last_day_of_month
+	Interval         int       `json:"interval,omitempty"`
+	DayOfMonth       int       `json:"day_of_month,omitempty"`
+	DayOfWeek        int       `json:"day_of_week,omitempty"`         // 0=Sunday, 1=Monday, etc.
+	CalendarType     string    `json:"calendar_type,omitempty"`       // solar, lunar (for monthly/yearly)
+	TriggerTimeOfDay string    `json:"trigger_time_of_day,omitempty"` // HH:MM format (UTC)
+	IntervalSeconds  int       `json:"interval_seconds,omitempty"`    // ⭐ ADD THIS FIELD
+	OriginTime       time.Time `json:"origin_time,omitempty"`         // ⭐ ADD THIS FIELD
 
 }
 
@@ -99,6 +100,7 @@ const (
 	RecurrenceTypeWeekly              = "weekly"
 	RecurrenceTypeMonthly             = "monthly"
 	RecurrenceTypeLunarLastDayOfMonth = "lunar_last_day_of_month"
+	RecurrenceTypeSolarLastDayOfMonth = "solar_last_day_of_month"
 	RecurrenceTypeIntervalSeconds     = "interval_seconds" // ⭐ ADD THIS
 
 )
