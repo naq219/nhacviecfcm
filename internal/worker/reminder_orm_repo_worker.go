@@ -255,7 +255,9 @@ func (r *WorkerReminderRepo) fetchRemindersCustom(ctx context.Context, baseCond 
 			UserID:          rec.UserID,
 			Title:           rec.Title,
 			Description:     rec.Description,
+			Tag:             rec.Tag,
 			Type:            rec.Type,
+			CalendarType:    rec.CalendarType,
 			Status:          rec.Status,
 			IsSendedOneTime: rec.IsSendedOneTime,
 			MaxCRP:          rec.MaxCRP,
@@ -266,7 +268,18 @@ func (r *WorkerReminderRepo) fetchRemindersCustom(ctx context.Context, baseCond 
 			NextActionAt:    parseTime(rec.NextActionAt),
 			NextCRP:         parseTime(rec.NextCRP),
 			SnoozeUntil:     parseTime(rec.SnoozeUntil),
+			LastSentAt:      parseTime(rec.LastSentAt),
+			LastCompletedAt: parseTime(rec.LastCompletedAt),
 		}
+
+		// Parse RecurrencePattern from JSON if present
+		if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
+			var pattern models.RecurrencePattern
+			if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err == nil {
+				reminder.RecurrencePattern = &pattern
+			}
+		}
+
 		reminders = append(reminders, reminder)
 	}
 
@@ -327,17 +340,31 @@ func (r *WorkerReminderRepo) fetchReminders(ctx context.Context, baseCond dbx.Ha
 			UserID:          rec.UserID,
 			Title:           rec.Title,
 			Description:     rec.Description,
+			Tag:             rec.Tag,
 			Type:            rec.Type,
+			CalendarType:    rec.CalendarType,
 			Status:          rec.Status,
 			IsSendedOneTime: rec.IsSendedOneTime,
 			MaxCRP:          rec.MaxCRP,
 			CRPCount:        rec.CRPCount,
 			CRPIntervalSec:  rec.CRPIntervalSec,
+			RepeatStrategy:  rec.RepeatStrategy,
+			NextRecurring:   parseTime(rec.NextRecurring),
 			NextActionAt:    parseTime(rec.NextActionAt),
 			NextCRP:         parseTime(rec.NextCRP),
 			SnoozeUntil:     parseTime(rec.SnoozeUntil),
-			// Map other fields if needed for notification
+			LastSentAt:      parseTime(rec.LastSentAt),
+			LastCompletedAt: parseTime(rec.LastCompletedAt),
 		}
+
+		// Parse RecurrencePattern from JSON if present
+		if rec.RecurrenceJSON.Valid && rec.RecurrenceJSON.String != "" {
+			var pattern models.RecurrencePattern
+			if err := json.Unmarshal([]byte(rec.RecurrenceJSON.String), &pattern); err == nil {
+				reminder.RecurrencePattern = &pattern
+			}
+		}
+
 		reminders = append(reminders, reminder)
 	}
 

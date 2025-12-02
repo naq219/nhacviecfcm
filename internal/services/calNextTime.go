@@ -121,6 +121,9 @@ func calcNextDailyTime(reminder models.Reminder, lastTime time.Time, now time.Ti
 	pattern := reminder.RecurrencePattern
 	interval := pattern.Interval     // số ngày lặp
 	originTime := pattern.OriginTime // thời gian bắt đầu
+	if originTime.IsZero() {
+		return time.Time{}, errors.New("originTime required for daily reminder")
+	}
 	originHour := originTime.Hour()
 	originMinute := originTime.Minute()
 
