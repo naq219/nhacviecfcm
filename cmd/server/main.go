@@ -86,14 +86,14 @@ func main() {
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := worker.NewWorker(
-		sysRepo,      // SystemStatusRepo
-		reminderRepo, // ReminderRepo
-		userRepo,     // UserRepo
+	// w := worker.NewWorker(
+	// 	sysRepo,      // SystemStatusRepo
+	// 	reminderRepo, // ReminderRepo
+	// 	userRepo,     // UserRepo
 
-		schedCalculator, // ScheduleCalc
-		time.Duration(cfg.WorkerInterval)*time.Second, // interval
-	)
+	// 	schedCalculator, // ScheduleCalc
+	// 	time.Duration(cfg.WorkerInterval)*time.Second, // interval
+	// )
 	//w.Start(bgCtx)
 
 	// Initialize worker-specific repo
@@ -128,9 +128,8 @@ func main() {
 
 		workerLoopUT.Start(bgCtx)
 
-		time.Sleep(4000 * time.Second)
 		workerLoopNOUT.Start(bgCtx)
-		w.Start(bgCtx)
+		//w.Start(bgCtx)
 		wOneTimeV2.Start(bgCtx)
 
 	}()
@@ -153,7 +152,7 @@ func main() {
 		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.String(200, "RemiAq API is running! ver 4")
+			return re.String(200, "RemiAq API is running! ver 4.6")
 		})
 
 		// Raw SQL query endpoints
