@@ -121,6 +121,7 @@ func (w *WorkerLoopNoUT) processRecurringNoCRP(ctx context.Context, now time.Tim
 		}
 		r.NextRecurring = nextRecurring
 		r.LastSentAt = now
+		r.NextActionAt = nextRecurring
 
 		if err := w.repo.Update(ctx, r); err != nil {
 			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
@@ -166,6 +167,7 @@ func (w *WorkerLoopNoUT) processRecurringCRPTrigger(ctx context.Context, now tim
 		r.CRPCount = 0
 		r.NextCRP = now.Add(time.Duration(r.CRPIntervalSec) * time.Second)
 		r.LastSentAt = now
+		r.NextActionAt = r.NextCRP
 
 		if err := w.repo.Update(ctx, r); err != nil {
 			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)
@@ -204,6 +206,7 @@ func (w *WorkerLoopNoUT) processRecurringCRPRetry(ctx context.Context, now time.
 		r.CRPCount++
 		r.NextCRP = now.Add(time.Duration(r.CRPIntervalSec) * time.Second)
 		r.LastSentAt = now
+		r.NextActionAt = r.NextCRP
 
 		if err := w.repo.Update(ctx, r); err != nil {
 			logCase.Errorf("Update failed ID=%s: %v", r.ID, err)

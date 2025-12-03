@@ -38,6 +38,7 @@ func (r *WorkerReminderRepo) recordToReminder(record *core.Record) (*models.Remi
 		NextRecurring:      record.GetDateTime("next_recurring").Time(),
 		NextCRP:            record.GetDateTime("next_crp").Time(),
 		NextActionAt:       record.GetDateTime("next_action_at").Time(),
+		OriginTime:         record.GetDateTime("origin_time").Time(),
 		CRPIntervalSec:     record.GetInt("crp_interval_sec"),
 		MaxCRP:             record.GetInt("max_crp"),
 		CRPCount:           record.GetInt("crp_count"),
@@ -85,6 +86,12 @@ func (r *WorkerReminderRepo) reminderToRecord(reminder *models.Reminder, record 
 		record.Set("next_action_at", reminder.NextActionAt)
 	} else {
 		record.Set("next_action_at", nil)
+	}
+
+	if !reminder.OriginTime.IsZero() {
+		record.Set("origin_time", reminder.OriginTime.Format(time.RFC3339Nano))
+	} else {
+		record.Set("origin_time", nil)
 	}
 
 	if !reminder.NextRecurring.IsZero() {
@@ -224,6 +231,7 @@ func (r *WorkerReminderRepo) fetchRemindersCustom(ctx context.Context, baseCond 
 		NextRecurring      string         `db:"next_recurring"`
 		NextCRP            string         `db:"next_crp"`
 		NextActionAt       string         `db:"next_action_at"`
+		OriginTime         string         `db:"origin_time"`
 		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
 		CRPIntervalSec     int            `db:"crp_interval_sec"`
 		MaxCRP             int            `db:"max_crp"`
@@ -266,6 +274,7 @@ func (r *WorkerReminderRepo) fetchRemindersCustom(ctx context.Context, baseCond 
 			RepeatStrategy:  rec.RepeatStrategy,
 			NextRecurring:   parseTime(rec.NextRecurring),
 			NextActionAt:    parseTime(rec.NextActionAt),
+			OriginTime:      parseTime(rec.OriginTime),
 			NextCRP:         parseTime(rec.NextCRP),
 			SnoozeUntil:     parseTime(rec.SnoozeUntil),
 			LastSentAt:      parseTime(rec.LastSentAt),
@@ -299,6 +308,7 @@ func (r *WorkerReminderRepo) fetchReminders(ctx context.Context, baseCond dbx.Ha
 		NextRecurring      string         `db:"next_recurring"`
 		NextCRP            string         `db:"next_crp"`
 		NextActionAt       string         `db:"next_action_at"`
+		OriginTime         string         `db:"origin_time"`
 		RecurrenceJSON     sql.NullString `db:"recurrence_pattern"`
 		CRPIntervalSec     int            `db:"crp_interval_sec"`
 		MaxCRP             int            `db:"max_crp"`
@@ -351,6 +361,7 @@ func (r *WorkerReminderRepo) fetchReminders(ctx context.Context, baseCond dbx.Ha
 			RepeatStrategy:  rec.RepeatStrategy,
 			NextRecurring:   parseTime(rec.NextRecurring),
 			NextActionAt:    parseTime(rec.NextActionAt),
+			OriginTime:      parseTime(rec.OriginTime),
 			NextCRP:         parseTime(rec.NextCRP),
 			SnoozeUntil:     parseTime(rec.SnoozeUntil),
 			LastSentAt:      parseTime(rec.LastSentAt),
