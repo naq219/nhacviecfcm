@@ -27,12 +27,12 @@ func NewFCMService(credentialsPath string) (*FCMService, error) {
 
 	// Initialize Firebase app with explicit project ID
 	opt := option.WithCredentialsFile(credentialsPath)
-	
+
 	// Create config with project ID
 	config := &firebase.Config{
-		ProjectID: "quan-than", // Use project ID from credentials
+		ProjectID: "reminaq-001", // Use project ID from credentials
 	}
-	
+
 	app, err := firebase.NewApp(ctx, config, opt)
 	if err != nil {
 		return nil, err

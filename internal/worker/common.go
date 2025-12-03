@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"remiaq/internal/models"
-	"remiaq/internal/services/fcmutils"
+	"remiaq/internal/services"
 )
 
 // IsWorkerSystemEnabled checks if the worker is enabled in the system settings.
@@ -20,7 +20,7 @@ func IsWorkerSystemEnabled(ctx context.Context, sysRepo SystemStatusRepo, logErr
 	return enabled
 }
 
-// SendNotification sends FCM notification to user
+// SendNotification sends FCM notification to user using FCMService
 // If sending fails, it updates system_status with error and disables worker
 func SendNotification(
 	ctx context.Context,
@@ -28,6 +28,7 @@ func SendNotification(
 	userRepo UserRepo,
 	sysRepo SystemStatusRepo,
 	logError func(format string, v ...any),
+	fcmService *services.FCMService,
 ) error {
 	// Get user
 	user, err := userRepo.GetByID(ctx, reminder.UserID)
@@ -45,9 +46,8 @@ func SendNotification(
 		return fmt.Errorf("user FCM not active")
 	}
 
-	// Send FCM notification
-	_, err = fcmutils.SendFCMNotification(ctx, reminder.Title, reminder.Description, user.FCMToken, user.Email)
-	if err != nil {
+	// Send FCM notification using FCMService
+	if err := fcmService.SendNotification(user.FCMToken, reminder.Title, reminder.Description); err != nil {
 		// FCM sending failed - this is a system error
 		errMsg := fmt.Sprintf("FCM send failed for reminder %s: %v", reminder.ID, err)
 		logError(errMsg)

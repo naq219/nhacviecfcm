@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"remiaq/internal/models"
+	"remiaq/internal/services"
 	"remiaq/internal/utils"
 
 	"github.com/pocketbase/pocketbase"
@@ -12,11 +13,12 @@ import (
 
 // WorkerOneTimeV2 processes one-time reminders
 type WorkerOneTimeV2 struct {
-	repo     *WorkerReminderRepo
-	userRepo UserRepo
-	sysRepo  SystemStatusRepo
-	interval time.Duration
-	logger   *utils.Logger
+	repo       *WorkerReminderRepo
+	userRepo   UserRepo
+	sysRepo    SystemStatusRepo
+	interval   time.Duration
+	logger     *utils.Logger
+	fcmService *services.FCMService
 }
 
 // NewWorkerOneTimeV2 creates a new worker
@@ -26,13 +28,15 @@ func NewWorkerOneTimeV2(
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
+	fcmService *services.FCMService,
 ) *WorkerOneTimeV2 {
 	return &WorkerOneTimeV2{
-		sysRepo:  sysRepo,
-		repo:     repo,
-		userRepo: userRepo,
-		interval: interval,
-		logger:   utils.NewLogger(app, "WORKER_ONE_TIME_V2"),
+		sysRepo:    sysRepo,
+		repo:       repo,
+		userRepo:   userRepo,
+		interval:   interval,
+		logger:     utils.NewLogger(app, "WORKER_ONE_TIME_V2"),
+		fcmService: fcmService,
 	}
 }
 
@@ -101,7 +105,7 @@ func (w *WorkerOneTimeV2) processNoCRP(ctx context.Context, now time.Time) error
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s", r.ID, r.Title)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -138,7 +142,7 @@ func (w *WorkerOneTimeV2) processFirstSend(ctx context.Context, now time.Time) e
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s, MaxCRP=%d", r.ID, r.Title, r.MaxCRP)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -178,7 +182,7 @@ func (w *WorkerOneTimeV2) processRetry(ctx context.Context, now time.Time) error
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, CRP=%d/%d", r.ID, r.CRPCount+1, r.MaxCRP)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}

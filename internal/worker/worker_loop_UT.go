@@ -13,11 +13,12 @@ import (
 
 // WorkerLoopUT processes recurring reminders with "until complete" strategy
 type WorkerLoopUT struct {
-	repo     *WorkerReminderRepo
-	userRepo UserRepo
-	sysRepo  SystemStatusRepo
-	interval time.Duration
-	logger   *utils.Logger
+	repo       *WorkerReminderRepo
+	userRepo   UserRepo
+	sysRepo    SystemStatusRepo
+	interval   time.Duration
+	logger     *utils.Logger
+	fcmService *services.FCMService
 }
 
 // NewWorkerLoopUT creates a new worker
@@ -27,13 +28,15 @@ func NewWorkerLoopUT(
 	repo *WorkerReminderRepo,
 	userRepo UserRepo,
 	interval time.Duration,
+	fcmService *services.FCMService,
 ) *WorkerLoopUT {
 	return &WorkerLoopUT{
-		sysRepo:  sysRepo,
-		repo:     repo,
-		userRepo: userRepo,
-		interval: interval,
-		logger:   utils.NewLogger(app, "WORKER_LOOP_UT"),
+		sysRepo:    sysRepo,
+		repo:       repo,
+		userRepo:   userRepo,
+		interval:   interval,
+		logger:     utils.NewLogger(app, "WORKER_LOOP_UT"),
+		fcmService: fcmService,
 	}
 }
 
@@ -112,7 +115,7 @@ func (w *WorkerLoopUT) processRecurringUntilCompleteFirstTime(ctx context.Contex
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s", r.ID, r.Title)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -148,7 +151,7 @@ func (w *WorkerLoopUT) processRecurringUntilCompleteFinished(ctx context.Context
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s", r.ID, r.Title)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -188,7 +191,7 @@ func (w *WorkerLoopUT) processRecurringUntilCompleteCRPFirstTime(ctx context.Con
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s, MaxCRP=%d", r.ID, r.Title, r.MaxCRP)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -226,7 +229,7 @@ func (w *WorkerLoopUT) processRecurringUntilCompleteCRPAfterComplete(ctx context
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, Title=%s, MaxCRP=%d", r.ID, r.Title, r.MaxCRP)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}
@@ -263,7 +266,7 @@ func (w *WorkerLoopUT) processRecurringUntilCompleteCRPRetry(ctx context.Context
 	for _, r := range reminders {
 		logCase.Infof("Processing ID=%s, CRP=%d/%d", r.ID, r.CRPCount+1, r.MaxCRP)
 
-		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf); err != nil {
+		if err := SendNotification(ctx, r, w.userRepo, w.sysRepo, w.logger.Errorf, w.fcmService); err != nil {
 			logCase.Errorf("Send failed ID=%s: %v", r.ID, err)
 			continue
 		}

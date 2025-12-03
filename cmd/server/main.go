@@ -61,15 +61,17 @@ func main() {
 	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 
 	// Initialize services
-	// var fcmService *services.FCMService
-	// if _, err := os.Stat(cfg.FCMCredentials); err == nil {
-	// 	fcmService, err = services.NewFCMService(cfg.FCMCredentials)
-	// 	if err != nil {
-	// 		log.Printf("Warning: Failed to initialize FCM service: %v", err)
-	// 	}
-	// } else {
-	// 	log.Println("Warning: FCM credentials not found, notifications disabled")
-	// }
+	var fcmService *services.FCMService
+	if _, err := os.Stat(cfg.FCMCredentials); err == nil {
+		fcmService, err = services.NewFCMService(cfg.FCMCredentials)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize FCM service: %v", err)
+			panic(err)
+		}
+	} else {
+		log.Println("Warning: FCM credentials not found, notifications disabled")
+		panic("FCM credentials not found")
+	}
 
 	lunarCalendar := services.NewLunarCalendar()
 	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
@@ -99,20 +101,13 @@ func main() {
 	// Initialize worker-specific repo
 	workerRepo := worker.NewWorkerReminderRepo(app)
 
-	wOneTimeV2 := worker.NewWorkerOneTimeV2(
-		app,
-		sysRepo,
-		workerRepo,
-		userRepo,
-		time.Duration(cfg.WorkerInterval)*time.Second,
-	)
-
 	workerLoopNOUT := worker.NewWorkerLoopNoUT(
 		app,
 		sysRepo,
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,
+		fcmService,
 	)
 
 	workerLoopUT := worker.NewWorkerLoopUT(
@@ -121,15 +116,27 @@ func main() {
 		workerRepo,
 		userRepo,
 		time.Duration(cfg.WorkerInterval)*time.Second,
+		fcmService,
 	)
 
 	go func() {
 		time.Sleep(4 * time.Second) // Chờ app ready
 
-		workerLoopUT.Start(bgCtx)
+		if fcmService == nil {
+			panic("FCM service is nil")
+		}
 
+		workerLoopUT.Start(bgCtx)
 		workerLoopNOUT.Start(bgCtx)
 		//w.Start(bgCtx)
+		wOneTimeV2 := worker.NewWorkerOneTimeV2(
+			app,
+			sysRepo,
+			workerRepo,
+			userRepo,
+			time.Duration(cfg.WorkerInterval)*time.Second,
+			fcmService,
+		)
 		wOneTimeV2.Start(bgCtx)
 
 	}()
@@ -152,7 +159,7 @@ func main() {
 		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.String(200, "RemiAq API is running! ver 4.6")
+			return re.String(200, "RemiAq API is running! ver 4.7")
 		})
 
 		// Raw SQL query endpoints
