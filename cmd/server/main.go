@@ -115,11 +115,21 @@ func main() {
 		time.Duration(cfg.WorkerInterval)*time.Second,
 	)
 
+	workerLoopUT := worker.NewWorkerLoopUT(
+		app,
+		sysRepo,
+		workerRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+	)
+
 	go func() {
 		time.Sleep(4 * time.Second) // Chờ app ready
-		workerLoopNOUT.Start(bgCtx)
+
+		workerLoopUT.Start(bgCtx)
 
 		time.Sleep(4000 * time.Second)
+		workerLoopNOUT.Start(bgCtx)
 		w.Start(bgCtx)
 		wOneTimeV2.Start(bgCtx)
 

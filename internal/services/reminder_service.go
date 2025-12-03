@@ -213,7 +213,7 @@ func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 		reminder.From = "api_complete"
 
 		// Calculate NEXT FRP from completion time
-		nextRecurring, err := s.schedCalculator.CalculateNextRecurring(reminder, now)
+		nextRecurring, err := Tinhtoan_NextRecurringV2_fromapi(*reminder, now) //s.schedCalculator.CalculateNextRecurring(reminder, now)
 		if err != nil {
 			log.Printf("⚠️  Failed to calculate next recurring: %v", err)
 			nextRecurring = now.Add(24 * time.Hour) // Fallback

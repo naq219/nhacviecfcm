@@ -213,8 +213,114 @@ func (r *WorkerReminderRepo) GetRecurringCRPRetry(ctx context.Context, now time.
 	}, now,
 		dbx.NewExp("max_crp > 0"),
 		dbx.NewExp("crp_count < max_crp"),
+
 		dbx.NewExp("next_crp <= {:now}", dbx.Params{"now": now}),
 		dbx.NewExp("next_recurring > {:now}", dbx.Params{"now": now}),
+		dbx.NewExp("(snooze_until IS NULL OR snooze_until = '' OR snooze_until <= {:now})", dbx.Params{"now": now}))
+}
+
+// 6.1. Lặp lại - không CRP - có crp_until_complete - Lần đầu
+// - type = recurring
+// - status = active
+// - max_crp = 0
+// - repeat_strategy = crp_until_complete
+// - next_recurring <= now()
+// - is_sended_one_time = false
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringUntilCompleteFirstTime(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchReminders(ctx, dbx.HashExp{
+		"type":               models.ReminderTypeRecurring,
+		"status":             models.ReminderStatusActive,
+		"max_crp":            0,
+		"repeat_strategy":    models.RepeatStrategyCRPUntilComplete,
+		"is_sended_one_time": false,
+	}, now, "next_recurring")
+}
+
+// 6.2. Lặp lại - không CRP - có crp_until_complete - Đã complete
+// - type = recurring
+// - status = active
+// - max_crp = 0
+// - repeat_strategy = crp_until_complete
+// - next_recurring <= now()
+// - is_sended_one_time = true
+// - last_completed_at > last_sent_at
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringUntilCompleteFinished(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchRemindersCustom(ctx, dbx.HashExp{
+		"type":               models.ReminderTypeRecurring,
+		"status":             models.ReminderStatusActive,
+		"max_crp":            0,
+		"repeat_strategy":    models.RepeatStrategyCRPUntilComplete,
+		"is_sended_one_time": true,
+	}, now,
+		dbx.NewExp("next_recurring <= {:now}", dbx.Params{"now": now}),
+		dbx.NewExp("last_completed_at > last_sent_at"),
+		dbx.NewExp("(snooze_until IS NULL OR snooze_until = '' OR snooze_until <= {:now})", dbx.Params{"now": now}))
+}
+
+// 7.1.1. Lặp lại - có CRP - có crp_until_complete - FRP Trigger - Lần đầu tiên
+// - type = recurring
+// - status = active
+// - max_crp > 0
+// - repeat_strategy = crp_until_complete
+// - next_recurring <= now()
+// - is_sended_one_time = false
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringUntilCompleteCRPFirstTime(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchReminders(ctx, dbx.HashExp{
+		"type":               models.ReminderTypeRecurring,
+		"status":             models.ReminderStatusActive,
+		"repeat_strategy":    models.RepeatStrategyCRPUntilComplete,
+		"is_sended_one_time": false,
+	}, now, "next_recurring", dbx.NewExp("max_crp > 0"))
+}
+
+// 7.1.2. Lặp lại - có CRP - có crp_until_complete - FRP Trigger - User đã complete lần trước
+// - type = recurring
+// - status = active
+// - max_crp > 0
+// - repeat_strategy = crp_until_complete
+// - next_recurring <= now()
+// - is_sended_one_time = true
+// - last_completed_at > last_sent_at
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringUntilCompleteCRPAfterComplete(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchRemindersCustom(ctx, dbx.HashExp{
+		"type":               models.ReminderTypeRecurring,
+		"status":             models.ReminderStatusActive,
+		"repeat_strategy":    models.RepeatStrategyCRPUntilComplete,
+		"is_sended_one_time": true,
+	}, now,
+		dbx.NewExp("max_crp > 0"),
+		dbx.NewExp("next_recurring <= {:now}", dbx.Params{"now": now}),
+		dbx.NewExp("last_completed_at > last_sent_at"),
+		dbx.NewExp("(snooze_until IS NULL OR snooze_until = '' OR snooze_until <= {:now})", dbx.Params{"now": now}))
+}
+
+// 7.2. Lặp lại - có CRP - có crp_until_complete - CRP Retry
+// - type = recurring
+// - status = active
+// - max_crp > 0
+// - crp_count < max_crp
+// - repeat_strategy = crp_until_complete
+// - next_recurring > now()    (CHƯA đến chu kỳ FRP mới)
+// - next_crp <= now()
+// - is_sended_one_time = true
+// - (last_completed_at IS NULL OR last_completed_at <= last_sent_at)  (User CHƯA complete)
+// - snooze_until <= now()
+func (r *WorkerReminderRepo) GetRecurringUntilCompleteCRPRetry(ctx context.Context, now time.Time) ([]*models.Reminder, error) {
+	return r.fetchRemindersCustom(ctx, dbx.HashExp{
+		"type":               models.ReminderTypeRecurring,
+		"status":             models.ReminderStatusActive,
+		"repeat_strategy":    models.RepeatStrategyCRPUntilComplete,
+		"is_sended_one_time": true,
+	}, now,
+		dbx.NewExp("max_crp > 0"),
+		dbx.NewExp("crp_count < max_crp"),
+		dbx.NewExp("next_crp <= {:now}", dbx.Params{"now": now}),
+
+		dbx.NewExp("(last_completed_at IS NULL OR last_completed_at <= last_sent_at)"),
 		dbx.NewExp("(snooze_until IS NULL OR snooze_until = '' OR snooze_until <= {:now})", dbx.Params{"now": now}))
 }
 
