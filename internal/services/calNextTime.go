@@ -46,9 +46,7 @@ func Tinhtoan_NextRecurringV2(reminder models.Reminder, now time.Time) (time.Tim
 
 	// hàng x tháng âm lịch
 	if reminder.CalendarType == models.CalendarTypeLunar {
-		//return calcNextLunarMonthly(reminder, now)
-		//todo
-		return time.Time{}, errors.New("Chưa triển khai")
+		return calcNextLunarMonthly(reminder, now)
 	}
 
 	// chỉ trường hợp lặp không UT tại vì có UT thì không cần tính toán
@@ -63,7 +61,8 @@ func Tinhtoan_NextRecurringV2(reminder models.Reminder, now time.Time) (time.Tim
 	switch pattern.Type {
 	case models.RecurrenceTypeDaily:
 		return calcNextDailyTime(reminder, reminder.OriginTime, now)
-
+	case models.RecurrenceTypeWeekly:
+		return calcNextWeekly(reminder, reminder.OriginTime, now)
 	case models.RecurrenceTypeMonthly:
 		return calcNextSolarMonthly(reminder, reminder.OriginTime, now)
 	case models.RecurrenceTypeSolarLastDayOfMonth:
@@ -156,23 +155,23 @@ func calcNextSolarMonthly(reminder models.Reminder, lastTime time.Time, now time
 	originHour := originTime.Hour()
 	originMinute := originTime.Minute()
 
-	// 1) Bắt đầu từ lastTime, tạo mốc ngày-tháng-năm nhưng giữ nguyên ngày/giờ của originTime
+	// 1) Bắt đầu từ lastTime (normalize về ngày 1 để tránh overflow)
 	nextTime := time.Date(
 		lastTime.Year(),
 		lastTime.Month(),
-		originDay,
+		1, // START AT DAY 1
 		originHour, originMinute, 0, 0,
 		location,
 	)
 
-	// 2) Cộng ít nhất 1 interval tháng
+	// 2) Cộng interval tháng
 	nextTime = nextTime.AddDate(0, interval, 0)
 
-	// 3) Điều chỉnh nếu tháng đó không đủ ngày
+	// 3) Set ngày theo originDay, điều chỉnh nếu tháng không đủ ngày
 	lastDay := time.Date(nextTime.Year(), nextTime.Month()+1, 0, 0, 0, 0, 0, location).Day()
 
 	if originDay > lastDay {
-		// tháng sau không có ngày originDay → dùng ngày cuối tháng
+		// Tháng này không có ngày originDay → dùng ngày cuối tháng
 		nextTime = time.Date(
 			nextTime.Year(),
 			nextTime.Month(),
@@ -181,7 +180,7 @@ func calcNextSolarMonthly(reminder models.Reminder, lastTime time.Time, now time
 			location,
 		)
 	} else {
-		// tháng sau có đủ ngày → giữ nguyên ngày
+		// Tháng này có đủ ngày → set originDay
 		nextTime = time.Date(
 			nextTime.Year(),
 			nextTime.Month(),
@@ -193,16 +192,101 @@ func calcNextSolarMonthly(reminder models.Reminder, lastTime time.Time, now time
 
 	// 4) Nếu vẫn chưa vượt now → cộng thêm interval tháng cho tới khi > now
 	for !nextTime.After(now) {
-		nextTime = nextTime.AddDate(0, interval, 0)
+		// Normalize về ngày 1 trước khi add để tránh overflow
+		tmpTime := time.Date(nextTime.Year(), nextTime.Month(), 1, originHour, originMinute, 0, 0, location)
+		tmpTime = tmpTime.AddDate(0, interval, 0)
 
-		lastDay = time.Date(nextTime.Year(), nextTime.Month()+1, 0, 0, 0, 0, 0, location).Day()
+		lastDay = time.Date(tmpTime.Year(), tmpTime.Month()+1, 0, 0, 0, 0, 0, location).Day()
 
 		if originDay > lastDay {
-			nextTime = time.Date(nextTime.Year(), nextTime.Month(), lastDay, originHour, originMinute, 0, 0, location)
+			nextTime = time.Date(tmpTime.Year(), tmpTime.Month(), lastDay, originHour, originMinute, 0, 0, location)
 		} else {
-			nextTime = time.Date(nextTime.Year(), nextTime.Month(), originDay, originHour, originMinute, 0, 0, location)
+			nextTime = time.Date(tmpTime.Year(), tmpTime.Month(), originDay, originHour, originMinute, 0, 0, location)
 		}
 	}
+
+	return nextTime, nil
+}
+
+// calcNextWeekly tính thời điểm lặp tiếp theo cho weekly pattern
+// Lấy weekday từ originTime.Weekday() thay vì pattern.DayOfWeek
+func calcNextWeekly(reminder models.Reminder, lastTime time.Time, now time.Time) (time.Time, error) {
+	pattern := reminder.RecurrencePattern
+	originTime := reminder.OriginTime
+	if originTime.IsZero() {
+		return time.Time{}, errors.New("originTime required for weekly reminder")
+	}
+
+	// Lấy weekday từ originTime
+	targetWeekday := int(originTime.Weekday()) // 0=Sunday, 1=Monday, ..., 6=Saturday
+	originHour := originTime.Hour()
+	originMinute := originTime.Minute()
+	interval := pattern.Interval // số tuần lặp
+	if interval <= 0 {
+		interval = 1
+	}
+
+	// Bắt đầu từ lastTime, set giờ/phút theo origin
+	nextTime := time.Date(
+		lastTime.Year(), lastTime.Month(), lastTime.Day(),
+		originHour, originMinute, 0, 0,
+		lastTime.Location(),
+	)
+
+	// Tính số ngày cần thêm để đến targetWeekday
+	currentWeekday := int(nextTime.Weekday())
+	daysAhead := (targetWeekday - currentWeekday + 7) % 7
+
+	if daysAhead == 0 {
+		// Hôm nay đúng weekday, check xem đã qua now chưa
+		if nextTime.After(now) {
+			return nextTime, nil
+		}
+		// Chưa đến now, lấy tuần tiếp theo
+		daysAhead = 7 * interval
+	}
+
+	nextTime = nextTime.AddDate(0, 0, daysAhead)
+
+	// Nếu vẫn chưa qua now, cộng thêm interval weeks
+	for !nextTime.After(now) {
+		nextTime = nextTime.AddDate(0, 0, 7*interval)
+	}
+
+	return nextTime, nil
+}
+
+// calcNextLunarMonthly tính thời điểm lặp tiếp theo cho lunar monthly
+func calcNextLunarMonthly(reminder models.Reminder, now time.Time) (time.Time, error) {
+	originTime := reminder.OriginTime
+	if originTime.IsZero() {
+		return time.Time{}, errors.New("originTime required for lunar monthly")
+	}
+
+	// Lấy ngày âm lịch từ originTime
+	vnOrigin := originTime.In(time.FixedZone("VN", 7*3600))
+	key := vnOrigin.Format("2006-01-02")
+	lunarOrigin, ok := SolarToLunarMap[key]
+	if !ok {
+		return time.Time{}, errors.New("origin date not in lunar map")
+	}
+
+	lunarDay := lunarOrigin.Day
+	originHour := originTime.Hour()
+	originMinute := originTime.Minute()
+
+	// Tìm ngày âm lịch tiếp theo
+	nextSolar, err := FindNextLunarMonthly(now, lunarDay)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Set giờ/phút theo originTime
+	nextTime := time.Date(
+		nextSolar.Year(), nextSolar.Month(), nextSolar.Day(),
+		originHour, originMinute, 0, 0,
+		now.Location(),
+	)
 
 	return nextTime, nil
 }

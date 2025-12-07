@@ -208,7 +208,7 @@ func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 		// ========================================
 
 		// RESET CRP immediately (dù chưa đủ quota)
-		reminder.CRPCount = 0
+		reminder.CRPCount = 9999
 		reminder.LastCompletedAt = now
 		reminder.From = "api_complete"
 
@@ -216,7 +216,8 @@ func (s *ReminderService) OnUserComplete(ctx context.Context, id string) error {
 		nextRecurring, err := Tinhtoan_NextRecurringV2_fromapi(*reminder, now) //s.schedCalculator.CalculateNextRecurring(reminder, now)
 		if err != nil {
 			log.Printf("⚠️  Failed to calculate next recurring: %v", err)
-			nextRecurring = now.Add(24 * time.Hour) // Fallback
+			//nextRecurring = now.Add(24 * time.Hour) // Fallback
+			nextRecurring = reminder.NextRecurring
 		}
 
 		reminder.NextRecurring = nextRecurring

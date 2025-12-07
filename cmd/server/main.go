@@ -159,7 +159,7 @@ func main() {
 		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.String(200, "RemiAq API is running! ver 4.7")
+			return re.String(200, "RemiAq API is running! ver 4.8: thêm cal week, fix nếu cuối tháng 31 thì tính sai tháng sau")
 		})
 
 		// Raw SQL query endpoints
