@@ -9,6 +9,13 @@ import (
 	"google.golang.org/api/option"
 )
 
+// FCMServiceInterface defines the interface for FCM service
+type FCMServiceInterface interface {
+	SendNotification(token, title, body string) error
+	SendNotificationWithData(token, title, body string, data map[string]string) error
+	SendMulticast(tokens []string, title, body string) (*messaging.BatchResponse, error)
+}
+
 // FCMService handles Firebase Cloud Messaging
 type FCMService struct {
 	client *messaging.Client
@@ -18,9 +25,15 @@ type FCMService struct {
 func NewFCMService(credentialsPath string) (*FCMService, error) {
 	ctx := context.Background()
 
-	// Initialize Firebase app
+	// Initialize Firebase app with explicit project ID
 	opt := option.WithCredentialsFile(credentialsPath)
-	app, err := firebase.NewApp(ctx, nil, opt)
+
+	// Create config with project ID
+	config := &firebase.Config{
+		ProjectID: "reminaq-001", // Use project ID from credentials
+	}
+
+	app, err := firebase.NewApp(ctx, config, opt)
 	if err != nil {
 		return nil, err
 	}

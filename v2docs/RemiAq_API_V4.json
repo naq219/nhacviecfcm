@@ -1,0 +1,438 @@
+{
+    "info": {
+        "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "name": "RemiAq API v4",
+        "description": "Worker V2 - All 6 scenarios for ONE-TIME and RECURRING reminderswith FRP/CRP logic",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "🔐 AUTH",
+            "item": [
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData && jsonData.token) {",
+                                    "    pm.environment.set(\"auth_token\", jsonData.token);",
+                                    "    pm.environment.set(\"user_id\", jsonData.record.id);",
+                                    "    console.log(\"✓ Token saved\");",
+                                    "    console.log(\"✓ User ID: \" + jsonData.record.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"identity\": \"test@example.com\",\n  \"password\": \"123123123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/collections/musers/auth-with-password",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "collections",
+                                "musers",
+                                "auth-with-password"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "📋 ONE-TIME Reminders",
+            "item": [
+                {
+                    "name": "Case 1: ONE-TIME - No CRP",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData && jsonData.data && jsonData.data.id) {",
+                                    "    pm.environment.set(\"reminder_id\", jsonData.data.id);",
+                                    "    console.log(\"✓ Created: \" + jsonData.data.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Họp khách hàng\",\n  \"description\": \"Họp với khách hàng ABC về dự án mới\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"next_action_at\": \"2025-11-27T14:00:00Z\",\n  \"max_crp\": 0,\n  \"status\": \"active\",\n  \"tag\": \"work\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Case 2 & 3: ONE-TIME - With CRP",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Nộp báo cáo tháng 11\",\n  \"description\": \"Deadline báo cáo doanh thu\",\n  \"type\": \"one_time\",\n  \"calendar_type\": \"solar\",\n  \"next_action_at\": \"2025-11-27T17:00:00Z\",\n  \"max_crp\": 3,\n  \"crp_interval_sec\": 600,\n  \"status\": \"active\",\n  \"tag\": \"work\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🔄 RECURRING - No Until Complete",
+            "item": [
+                {
+                    "name": "Case 4: RECURRING - No CRP - No Until Complete",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Uống nước\",\n  \"description\": \"Uống 1 cốc nước mỗi 2 giờ\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"recurrence_pattern\": {\n    \"type\": \"interval_seconds\",\n    \"interval_seconds\": 7200\n  },\n  \"next_recurring\": \"2025-11-27T08:00:00Z\",\n  \"max_crp\": 0,\n  \"repeat_strategy\": \"none\",\n  \"status\": \"active\",\n  \"tag\": \"health\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Case 5.1 & 5.2: RECURRING - With CRP - No Until Complete",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Họp team weekly\",\n  \"description\": \"Họp review tiến độ tuần\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"recurrence_pattern\": {\n    \"type\": \"weekly\",\n    \"day_of_week\": 1,\n    \"trigger_time_of_day\": \"09:00\"\n  },\n  \"next_recurring\": \"2025-12-02T09:00:00Z\",\n  \"max_crp\": 2,\n  \"crp_interval_sec\": 300,\n  \"repeat_strategy\": \"none\",\n  \"status\": \"active\",\n  \"tag\": \"work\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "✅ RECURRING - Until Complete",
+            "item": [
+                {
+                    "name": "Case 6.1 & 6.2: RECURRING - No CRP - Until Complete",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Tập gym\",\n  \"description\": \"Tập gym 1 giờ\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"recurrence_pattern\": {\n    \"type\": \"daily\",\n    \"trigger_time_of_day\": \"18:00\"\n  },\n  \"next_recurring\": \"2025-11-27T18:00:00Z\",\n  \"max_crp\": 0,\n  \"repeat_strategy\": \"crp_until_complete\",\n  \"status\": \"active\",\n  \"tag\": \"health\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Case 7: RECURRING - With CRP - Until Complete",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Uống thuốc huyết áp\",\n  \"description\": \"Uống 1 viên thuốc huyết áp\",\n  \"type\": \"recurring\",\n  \"calendar_type\": \"solar\",\n  \"recurrence_pattern\": {\n    \"type\": \"daily\",\n    \"trigger_time_of_day\": \"08:00\"\n  },\n  \"next_recurring\": \"2025-11-27T08:00:00Z\",\n  \"max_crp\": 3,\n  \"crp_interval_sec\": 300,\n  \"repeat_strategy\": \"crp_until_complete\",\n  \"status\": \"active\",\n  \"tag\": \"health\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            " name": "⚙️ REMINDER Management",
+            "item": [
+                {
+                    "name": "Get My Reminders",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/mine",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "mine"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Reminder by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/{{reminder_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "{{reminder_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Complete Reminder",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/{{reminder_id}}/complete",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "{{reminder_id}}",
+                                "complete"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Snooze Reminder (30 min)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"snooze_minutes\": 30\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/{{reminder_id}}/snooze",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "{{reminder_id}}",
+                                "snooze"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Reminder",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/{{reminder_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "{{reminder_id}}"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Reminder",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/reminders/{{reminder_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "reminders",
+                                "{{reminder_id}}"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://127.0.0.1:8090",
+            "type": "string"
+        }
+    ]
+}

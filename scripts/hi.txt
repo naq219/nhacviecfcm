@@ -1,0 +1,3 @@
+cp d:/PROJECT/nhacviecfcm/internal/worker/worker.go d:/PROJECT/nhacviecfcm/temp/worker.go && cp d:/PROJECT/nhacviecfcm/internal/services/schedule_calculator.go d:/PROJECT/nhacviecfcm/temp/schedule_calculator.go && cp d:/PROJECT/nhacviecfcm/internal/repository/pocketbase/reminder_orm_repo.go d:/PROJECT/nhacviecfcm/temp/reminder_orm_repo.go && cp d:/PROJECT/nhacviecfcm/internal/models/reminder.go d:/PROJECT/nhacviecfcm/temp/reminder.go && cp d:/PROJECT/nhacviecfcm/cmd/server/main.go d:/PROJECT/nhacviecfcm/temp/main.go
+cp internal/services/reminder_service.go temp/reminder_service.go
+

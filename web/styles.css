@@ -1,0 +1,229 @@
+/* Custom styles for RemiAq Vue.js website */
+
+:root {
+    --primary-color: #6366f1;
+    --primary-light: #a5b4fc;
+    --secondary-color: #f59e0b;
+    --background: #f8fafc;
+    --card-bg: #ffffff;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --border-color: #e2e8f0;
+    --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-larger: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Glass morphism effect */
+.glass-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Soft button animations */
+.soft-button {
+    transition: all 0.3s ease;
+    transform: translateY(0);
+}
+
+.soft-button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-larger);
+}
+
+/* Smooth transitions */
+.fade-enter-active, .fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+    opacity: 0;
+}
+
+.slide-enter-active, .slide-leave-active {
+    transition: all 0.3s ease;
+}
+
+.slide-enter-from, .slide-leave-to {
+    transform: translateY(-20px);
+    opacity: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-pending { background-color: #fbbf24; }
+.status-completed { background-color: #10b981; }
+.status-snoozed { background-color: #3b82f6; }
+.status-error { background-color: #ef4444; }
+
+/* Type badges */
+.type-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.type-one_time { background-color: #f3f4f6; color: #374151; }
+.type-daily { background-color: #dbeafe; color: #1e40af; }
+.type-weekly { background-color: #d1fae5; color: #065f46; }
+.type-monthly { background-color: #ede9fe; color: #5b21b6; }
+.type-yearly { background-color: #fef3c7; color: #92400e; }
+
+/* Form enhancements */
+.form-input {
+    transition: all 0.3s ease;
+}
+
+.form-input:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Card hover effects */
+.reminder-card {
+    transition: all 0.3s ease;
+}
+
+.reminder-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-larger);
+}
+
+/* Gradient backgrounds */
+.gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.gradient-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.gradient-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* Notification styles */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 20px;
+    border-radius: 12px;
+    color: white;
+    font-weight: 500;
+    box-shadow: var(--shadow-larger);
+    z-index: 1000;
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification-success { background-color: #10b981; }
+.notification-error { background-color: #ef4444; }
+.notification-warning { background-color: #f59e0b; }
+.notification-info { background-color: #3b82f6; }
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .reminder-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+/* Loading animations */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Pulse animation for new items */
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .5;
+    }
+}
+
+/* Focus styles for accessibility */
+.focus-visible:focus {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    .glass-card {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+}

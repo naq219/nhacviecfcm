@@ -1,0 +1,1 @@
+GOOS=linux GOARCH=amd64 go build -o bin/remiaq_run1-linux ./cmd/server/main.go

@@ -43,3 +43,9 @@ pb_data/auxiliary.db
 pb_data/auxiliary.db
 pb_data/data.db
 pb_data/*
+tmp/*
+tmp
+cmd/server/__debug_bin.exe1327229045
+__debug_bin*
+bin/remiaq_run1-linux
+scripts/fcm_service.db

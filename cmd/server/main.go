@@ -6,22 +6,38 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 
 	"remiaq/config"
-	"remiaq/internal/handlers" // ← Đã sửa từ api/handlers
+	"remiaq/internal/handlers"
 	"remiaq/internal/middleware"
 	pbRepo "remiaq/internal/repository/pocketbase"
 	"remiaq/internal/services"
 	"remiaq/internal/worker"
-	
+
 	// Import migrations package để PocketBase load migrations
 	_ "remiaq/migrations"
 )
 
 func main() {
+
+	//ctx := context.Background()
+	// if err := fcmutils.InitializeFirebase(ctx); err != nil {
+	// 	log.Fatalf("Failed to initialize Firebase: %v", err)
+	// }
+
 	// Load configuration
+	if err := godotenv.Load(); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Warning: error loading .env: %v", err)
+		} else {
+			log.Println("No .env file found, using system environment")
+		}
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -29,46 +45,105 @@ func main() {
 
 	// Set PocketBase server address
 	os.Setenv("PB_ADDR", cfg.ServerAddr)
+	// Disable debug logging to reduce SQL query logs
+	os.Setenv("PB_DEBUG", "false")
 
 	// Create PocketBase instance
 	app := pocketbase.New()
 
-	// Initialize repositories
-	reminderRepo := pbRepo.NewReminderRepo(app)
-	userRepo := pbRepo.NewUserRepo(app)
+	// Note: PocketBase manages DB logging internally
+	// To reduce SQL query logs, set PB_DEBUG=false (already done above)
+
+	// Initialize repositories (using ORM implementations)
+	reminderRepo := pbRepo.NewReminderORMRepo(app)
+	userRepo := pbRepo.NewUserORMRepo(app)
 	queryRepo := pbRepo.NewQueryRepo(app)
+	sysRepo := pbRepo.NewSystemStatusORMRepo(app)
 
 	// Initialize services
-	// Note: FCM service is optional, we'll initialize it with a stub for now
 	var fcmService *services.FCMService
 	if _, err := os.Stat(cfg.FCMCredentials); err == nil {
 		fcmService, err = services.NewFCMService(cfg.FCMCredentials)
 		if err != nil {
 			log.Printf("Warning: Failed to initialize FCM service: %v", err)
-			// Continue without FCM for development
+			panic(err)
 		}
 	} else {
 		log.Println("Warning: FCM credentials not found, notifications disabled")
+		panic("FCM credentials not found")
 	}
 
 	lunarCalendar := services.NewLunarCalendar()
 	schedCalculator := services.NewScheduleCalculator(lunarCalendar)
-	reminderService := services.NewReminderService(reminderRepo, userRepo, fcmService, schedCalculator)
+	reminderService := services.NewReminderService(reminderRepo, userRepo, schedCalculator)
+	userService := services.NewUserService(userRepo) // Khởi tạo UserService
 
 	// Initialize handlers
 	reminderHandler := handlers.NewReminderHandler(reminderService)
 	queryHandler := handlers.NewQueryHandler(queryRepo)
-
-	// Initialize system status repo and start background worker
-	sysRepo := pbRepo.NewSystemStatusRepo(app)
 	sysHandler := handlers.NewSystemStatusHandler(sysRepo)
+	userHandler := handlers.NewUserHandler(userService) // Khởi tạo UserHandler
+
+	// Initialize and start background worker with all dependencies
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w := worker.NewWorker(sysRepo, reminderService, time.Duration(cfg.WorkerInterval)*time.Second)
-	w.Start(bgCtx)
+
+	// w := worker.NewWorker(
+	// 	sysRepo,      // SystemStatusRepo
+	// 	reminderRepo, // ReminderRepo
+	// 	userRepo,     // UserRepo
+
+	// 	schedCalculator, // ScheduleCalc
+	// 	time.Duration(cfg.WorkerInterval)*time.Second, // interval
+	// )
+	//w.Start(bgCtx)
+
+	// Initialize worker-specific repo
+	workerRepo := worker.NewWorkerReminderRepo(app)
+
+	workerLoopNOUT := worker.NewWorkerLoopNoUT(
+		app,
+		sysRepo,
+		workerRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+		fcmService,
+	)
+
+	workerLoopUT := worker.NewWorkerLoopUT(
+		app,
+		sysRepo,
+		workerRepo,
+		userRepo,
+		time.Duration(cfg.WorkerInterval)*time.Second,
+		fcmService,
+	)
+
+	go func() {
+		time.Sleep(4 * time.Second) // Chờ app ready
+
+		if fcmService == nil {
+			panic("FCM service is nil")
+		}
+
+		workerLoopUT.Start(bgCtx)
+		workerLoopNOUT.Start(bgCtx)
+		//w.Start(bgCtx)
+		wOneTimeV2 := worker.NewWorkerOneTimeV2(
+			app,
+			sysRepo,
+			workerRepo,
+			userRepo,
+			time.Duration(cfg.WorkerInterval)*time.Second,
+			fcmService,
+		)
+		wOneTimeV2.Start(bgCtx)
+
+	}()
 
 	// Setup routes
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+
 		// Handle preflight OPTIONS requests
 		se.Router.OPTIONS("/*", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
@@ -76,12 +151,18 @@ func main() {
 		})
 
 		// Health check
+		//	@Summary		Health check
+		//	@Description	Kiểm tra server có chạy hay không
+		//	@Tags			system
+		//	@Produce		plain
+		//	@Success		200	{string}	string	"RemiAq API is running!"
+		//	@Router			/hello [get]
 		se.Router.GET("/hello", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.String(200, "RemiAq API is running!")
+			return re.String(200, "RemiAq API is running! ver 4.8: thêm cal week, fix nếu cuối tháng 31 thì tính sai tháng sau")
 		})
 
-		// Raw SQL query endpoints (from original main.go)
+		// Raw SQL query endpoints
 		se.Router.GET("/api/rquery", queryHandler.HandleSelect)
 		se.Router.POST("/api/rquery", queryHandler.HandleSelect)
 
@@ -94,18 +175,20 @@ func main() {
 		se.Router.GET("/api/rdelete", queryHandler.HandleDelete)
 		se.Router.DELETE("/api/rdelete", queryHandler.HandleDelete)
 
-		// Reminder CRUD endpoints
-		se.Router.POST("/api/reminders", reminderHandler.CreateReminder)
-		se.Router.GET("/api/reminders/{id}", reminderHandler.GetReminder)
-		se.Router.PUT("/api/reminders/{id}", reminderHandler.UpdateReminder)
-		se.Router.DELETE("/api/reminders/{id}", reminderHandler.DeleteReminder)
+		// --- Auth-protected endpoints (PocketBase built-in auth) ---
+		api := se.Router.Group("/api")
+		api.Bind(apis.RequireAuth())
+		api.POST("/reminders", reminderHandler.CreateReminder)
+		api.GET("/reminders/mine", reminderHandler.GetCurrentUserReminders) // New route
+		api.GET("/reminders/{id}", reminderHandler.GetReminder)
+		api.PUT("/reminders/{id}", reminderHandler.UpdateReminder)
+		api.DELETE("/reminders/{id}", reminderHandler.DeleteReminder)
+		api.GET("/users/{userId}/reminders", reminderHandler.GetUserReminders)
+		api.POST("/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
+		api.POST("/reminders/{id}/complete", reminderHandler.CompleteReminder)
 
-		// User reminders
-		se.Router.GET("/api/users/{userId}/reminders", reminderHandler.GetUserReminders)
-
-		// Reminder actions
-		se.Router.POST("/api/reminders/{id}/snooze", reminderHandler.SnoozeReminder)
-		se.Router.POST("/api/reminders/{id}/complete", reminderHandler.CompleteReminder)
+		// User API
+		api.PUT("/users/fcm-token", userHandler.UpdateFCMToken) // New route for updating FCM token
 
 		// System status API
 		se.Router.GET("/api/system_status", sysHandler.GetSystemStatus)
@@ -114,7 +197,6 @@ func main() {
 		// HTML test pages
 		se.Router.GET("/test/system-status", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			// Đọc file HTML tĩnh
 			content, err := os.ReadFile("web/system_status_test.html")
 			if err != nil {
 				return re.String(404, "Test page not found")
@@ -134,9 +216,56 @@ func main() {
 			return re.String(200, string(content))
 		})
 
+		// Root endpoint - show API info instead of redirecting
 		se.Router.GET("/", func(re *core.RequestEvent) error {
 			middleware.SetCORSHeaders(re)
-			return re.Redirect(302, "/test")
+			re.Response.Header().Set("Content-Type", "text/plain")
+			return re.String(200, "RemiAq API is running!\n\nAvailable endpoints:\n- /swagger/ - Swagger documentation\n- /test/ - Test pages\n- /api/ - API endpoints")
+		})
+
+		// Swagger UI endpoints - handle both /swagger and /swagger/*
+		se.Router.GET("/swagger", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Redirect to /swagger/ to ensure proper path handling
+			return re.Redirect(302, "/swagger/")
+		})
+
+		se.Router.GET("/swagger/", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+			// Serve swagger.json as default for /swagger/
+			content, err := os.ReadFile("./docs/swagger.json")
+			if err != nil {
+				return re.String(404, "Swagger file not found")
+			}
+			re.Response.Header().Set("Content-Type", "application/json")
+			return re.String(200, string(content))
+		})
+
+		se.Router.GET("/swagger/*", func(re *core.RequestEvent) error {
+			middleware.SetCORSHeaders(re)
+
+			// Get the requested file path
+			requestedFile := re.Request.PathValue("*")
+			if requestedFile == "" {
+				requestedFile = "swagger.json"
+			}
+
+			// Read and serve the file
+			content, err := os.ReadFile("./docs/" + requestedFile)
+			if err != nil {
+				return re.String(404, "File not found: "+requestedFile)
+			}
+
+			// Set appropriate content type
+			if len(requestedFile) > 5 && requestedFile[len(requestedFile)-5:] == ".json" {
+				re.Response.Header().Set("Content-Type", "application/json")
+			} else if len(requestedFile) > 4 && requestedFile[len(requestedFile)-4:] == ".yaml" {
+				re.Response.Header().Set("Content-Type", "application/yaml")
+			} else {
+				re.Response.Header().Set("Content-Type", "text/html")
+			}
+
+			return re.String(200, string(content))
 		})
 
 		return se.Next()
