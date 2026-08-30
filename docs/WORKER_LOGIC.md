@@ -1,3 +1,23 @@
+> # ⛔ DEPRECATED — TÀI LIỆU LỖI THỜI, ĐỪNG DỰA VÀO
+>
+> File này mô tả phiên bản worker cũ và **không khớp với code hiện tại**. Các sai lệch đã xác minh:
+>
+> | Mục trong file này | Thực tế trong code |
+> |---|---|
+> | "Chạy mỗi 60 giây" | `WORKER_INTERVAL` giây — mặc định 10, `.env` đang = 5 (`config/config.go:14`, `cmd/server/main.go:104-141`) |
+> | 1 query duy nhất trên `next_action_at` | **3 worker × 10+ query**, partition rời nhau (`internal/worker/reminder_orm_repo_worker.go:127-330`) |
+> | "FCM token invalid → Disable user FCM" | **Không có.** `DisableFCM`/`SetFCMError` tồn tại nhưng không bao giờ được gọi; cột `fcm_error` không bao giờ được ghi (`internal/worker/common.go`) |
+> | Không nhắc `is_sended_one_time`, `repeat_strategy` | Đây là 2 điều kiện quan trọng nhất để phân nhánh |
+>
+> **Nguồn sự thật:** `internal/worker/worker_loop_noUT.go`, `worker_loop_UT.go`, `worker_onetime_v2.go`,
+> `internal/services/reminder_service.go`, `internal/services/calNextTime.go`.
+>
+> **Đặc tả để port sang Nuxt:** `E:\PROJECT\nhacviecfcm\nhacviecnuxt\docs\04b-tinh-lich-frp-crp.md`
+>
+> ---
+>
+> *Nội dung gốc giữ lại bên dưới chỉ để tham khảo lịch sử.*
+
 ```markdown
 # Worker Processing Logic
 

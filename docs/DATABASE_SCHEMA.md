@@ -1,4 +1,27 @@
 
+> # ⛔ THIẾU CỘT — ĐỪNG DÙNG LÀM NGUỒN SCHEMA
+>
+> Bảng `reminders` ở dưới **thiếu 3 cột có thật** trong database:
+>
+> | Cột thiếu | Vì sao quan trọng |
+> |---|---|
+> | **`origin_time`** | Mỏ neo của mọi phép tính lịch lặp (daily/weekly/monthly/interval/lunar). |
+> | **`is_sended_one_time`** | Phân biệt "gửi lần đầu" vs "đang retry CRP". |
+> | **`tag`** | Trường có thật, dùng phân loại. |
+>
+> Ngoài ra:
+> - Phần "Indexes (Recommended)" gợi ý `idx_reminders_next_action` — **không tồn tại** ở bất kỳ
+>   migration nào. Muốn có thì phải tự thêm migration mới.
+> - Bảng `system_status` thiếu cột `created` (chỉ liệt kê `mid`, `worker_enabled`, `last_error`, `updated`).
+>
+> **Nguồn sự thật:** `migrations/1671631110_init_schema.go` (và `1720166400_update_reminders_rules.go`).
+>
+> **Schema mới (Turso) đã bổ sung đủ:** `E:\PROJECT\nhacviecfcm\nhacviecnuxt\docs\03-database-va-api.md`
+>
+> ---
+>
+> *Nội dung gốc giữ lại bên dưới chỉ để tham khảo lịch sử.*
+
 ```markdown
 # Database Schema
 

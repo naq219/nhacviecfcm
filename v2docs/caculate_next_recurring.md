@@ -1,3 +1,29 @@
+> # ⛔ DEPRECATED — TÀI LIỆU LỖI THỜI, ĐỪNG DỰA VÀO
+>
+> File này mô tả các hàm **đã bị comment out** trong `internal/worker/worker_loop_noUT.go`
+> (xem dòng 232-258). Code hiện tại chỉ delegate sang `services.Tinhtoan_NextRecurringV2`.
+>
+> Các sai lệch đã xác minh:
+>
+> | Mục trong file này | Thực tế trong code |
+> |---|---|
+> | "Lunar monthly & `lunar_last_day_of_month` dùng **fallback 30 ngày**" | ❌ `calcNextLunarMonthly()` dùng `SolarToLunarMap` + `FindNextLunarMonthly()` thật (`calNextTime.go:260-292`) |
+> | "Weekly dùng `pattern.DayOfWeek`" | ❌ Worker dùng `originTime.Weekday()`, **bỏ qua `day_of_week`** (`calNextTime.go:212-221`) |
+> | "Base time = previous `NextRecurring`" | ❌ Base là **`reminder.OriginTime`** (`calNextTime.go:57,63,65,67`) |
+> | Không nhắc guard `interval <= 0` | ❌ `calcNextDailyTime`/`calcNextSolarMonthly` **treo vô hạn** nếu `interval = 0` (test `TestCalcNextDaily_ZeroInterval` đang treo) |
+>
+> **Nguồn sự thật:** `internal/services/calNextTime.go` (+ `calNextTime_test.go` = 22 test case).
+>
+> 🚨 **Lưu ý riêng cho âm lịch:** `internal/services/lunar_data.go` chứa bảng `SolarToLunarMap`
+> chỉ phủ **2024-01-01 → 2025-12-31** (731 ngày). Từ 2026 mọi reminder âm lịch đều lỗi.
+> Khi port sang Nuxt phải dùng **thuật toán** trong `internal/services/lunar_calendar.go`.
+>
+> **Đặc tả để port sang Nuxt:** `E:\PROJECT\nhacviecfcm\nhacviecnuxt\docs\04b-tinh-lich-frp-crp.md`
+>
+> ---
+>
+> *Nội dung gốc giữ lại bên dưới chỉ để tham khảo lịch sử.*
+
 # Calculation Logic for Next Recurring Time
 *Documentation for [calculateNextRecurringTH4NoCrpNoUT](file:///d:/PROJECT/nhacviecfcm/internal/worker/worker_loop_noUT.go#217-254) and [calculateNextRecurringTH4YesCrpNoUT](file:///d:/PROJECT/nhacviecfcm/internal/worker/worker_loop_noUT.go#255-259)*
 
