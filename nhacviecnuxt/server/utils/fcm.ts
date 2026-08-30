@@ -47,7 +47,7 @@ export function isFcmConfigured(): boolean {
 }
 
 /** Lấy access token OAuth2 bằng JWT (RS256) ký bằng Web Crypto */
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const cfg = useRuntimeConfig()
   const now = Math.floor(Date.now() / 1000)
 

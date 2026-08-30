@@ -122,11 +122,74 @@ npx wrangler pages deploy dist --project-name=sennote
 
 > ℹ️ Lần đầu wrangler tự tạo project `sennote` (không cần `pages project create` nếu đã tạo).
 
-## 4. Kiểm tra cron có chạy không
+## 4. 🚨 Cron: Pages KHÔNG tự chạy — phải dùng Worker riêng
 
-1. Vào Cloudflare → project `sennote` → **Settings** → **Functions** → **Cron Triggers** → thấy mục `* * * * *` (do Nitro tự sinh).
-2. (Local) chạy thử task: mở `http://localhost:3000/_nitro/tasks/reminders:check` khi `npm run dev` đang chạy (xem doc 04 mục 7).
-3. (Prod) tạo 1 reminder có `next_action_at` trong quá khứ, chờ 1–2 phút, xem thiết bị có nhận push không (cần mobile đã lưu FCM token).
+> **Cloudflare Pages không hỗ trợ Cron Triggers.** Nitro vẫn sinh handler `scheduled()`
+> trong bundle, Pages API cũng không có trường `triggers` — nên nó **không bao giờ được gọi**.
+> Hậu quả: reminder đến hạn nhưng không bao giờ gửi, mà log không báo lỗi gì.
+
+Cách giải quyết (đang dùng): một Worker nhỏ có cron thật, gọi về endpoint HTTP của Pages.
+
+```
+Cron Trigger (Worker sennote-cron, mỗi phút)
+        │  POST + header x-cron-secret
+        ▼
+https://sennote.pages.dev/api/cron/reminders-check
+        │
+        ▼
+runReminderCheck()  (server/utils/run-reminder-check.ts)
+        └── gửi FCM + cập nhật 11 nhánh A1–C5
+```
+
+### Cài đặt / triển khai lại
+
+```powershell
+# 1) Tạo secret dùng chung (1 lần)
+$secret = <chuỗi ngẫu nhiên>
+
+# 2) Trên Pages
+cd E:\PROJECT\nhacviecfcm\nhacviecnuxt
+npx wrangler pages secret put NUXT_CRON_SECRET --project-name=sennote   # nhập $secret
+npm run build
+npx wrangler pages deploy dist --project-name=sennote --branch main
+
+# 3) Worker cron
+cd cron
+npx wrangler secret put CRON_SECRET                                     # nhập CÙNG $secret
+npx wrangler deploy --name sennote-cron
+```
+
+> ⚠️ `NUXT_CRON_SECRET` (Pages) và `CRON_SECRET` (Worker) **phải giống hệt nhau**.
+
+### Kiểm tra cron có chạy không
+
+```powershell
+# Xem log thực tế (đợi 1–2 phút sẽ thấy hiện ra từng phút)
+cd cron
+npx wrangler tail sennote-cron
+#   "* * * * *" @ 6:10:18 PM - Ok
+#     (log) [cron] 200 {"result":"Đã xử lý 4 reminder, 0 lỗi","due":4,...}
+```
+
+Gọi tay để test nhanh:
+
+```powershell
+curl -X POST https://sennote.pages.dev/api/cron/reminders-check -H "x-cron-secret: <secret>"
+# sai secret -> 401 ; đúng -> {"result":"Đã xử lý N reminder, 0 lỗi","due":N,...}
+```
+
+### Chẩn đoán khi "reminder đến hạn mà không gửi"
+
+| Kiểm tra | Lệnh / chỗ xem |
+|---|---|
+| Cron có chạy? | `npx wrangler tail sennote-cron` (trong `cron/`) |
+| Worker có secret? | `npx wrangler secret list --name sennote-cron` |
+| FCM cấu hình đúng? | `node scripts/check-fcm-prod.mjs <url>` → `configured: true, accessToken: true` |
+| Worker có bị tắt? | `GET /api/system_status` → `worker_enabled: 1` |
+| User có thiết bị? | `GET /api/devices` — **rất hay quên**, device gắn theo từng tài khoản |
+| Reminder đúng định dạng? | `next_action_at` phải ISO 8601 UTC (`...Z`) |
+
+> ℹ️ (Local) Nitro task vẫn chạy bình thường ở dev: `http://localhost:3000/_nitro/tasks/reminders:check`.
 
 ## 5. Checklist sau deploy
 

@@ -16,7 +16,11 @@ console.log('thong ke:', JSON.stringify(rs.rows[0]))
 
 // Phải xoá reminder trước (có FK trỏ sang users)
 const ids = await db.execute(
-  "SELECT id FROM users WHERE email LIKE 'smoke%' OR email LIKE 'dbg%'",
+  `SELECT id FROM users
+    WHERE email LIKE 'smoke%'
+       OR email LIKE 'dbg%'
+       OR email LIKE 'fcmcheck%'
+       OR email LIKE '%@test.local'`,
 )
 const idList = ids.rows.map(r => String(r.id))
 

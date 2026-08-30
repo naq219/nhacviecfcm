@@ -447,6 +447,14 @@ async function patch(id: string, changes: Partial<Reminder>) {
 
 ## 5. Task cron `server/tasks/reminders/check.ts`
 
+> 🚨 **Đọc [doc 05 mục 4](./05-deploy-cloudflare-pages.md#4--cron-pages-không-tự-chạy--phải-dùng-worker-riêng) trước.**
+> **Cloudflare Pages không hỗ trợ Cron Triggers** → task này **không tự chạy trên production**.
+> Nó chỉ chạy khi dev (`/_nitro/tasks/reminders:check`) hoặc khi được gọi qua
+> `POST /api/cron/reminders-check` do Worker `sennote-cron` gọi mỗi phút.
+>
+> Vì vậy logic được tách ra `server/utils/run-reminder-check.ts` để cả 2 đường cùng dùng,
+> không viết 2 lần.
+
 > ⚠️ **Đường dẫn file quyết định tên task.** Nitro đổi `/` thành `:`, nên
 > `server/tasks/reminders/check.ts` → `reminders:check`.
 > Đặt nhầm thành `server/tasks/reminders-check.ts` → tên `reminders-check`, và log sẽ báo

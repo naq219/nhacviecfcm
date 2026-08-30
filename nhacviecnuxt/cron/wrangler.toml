@@ -1,0 +1,13 @@
+name = "sennote-cron"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Chạy mỗi phút
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+TARGET_URL = "https://sennote.pages.dev/api/cron/reminders-check"
+# CRON_SECRET được đặt bằng: npx wrangler secret put CRON_SECRET
+# (phải GIỐNG NUXT_CRON_SECRET trên Pages)
+

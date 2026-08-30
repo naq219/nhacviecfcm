@@ -46,7 +46,10 @@ npx wrangler pages deploy dist --project-name=sennote   # deploy thủ công (ho
 - **Auth**: `nuxt-auth-utils` cho **session** (`setUserSession`/`requireUserSession`/`useUserSession()`).
   ⚠️ **KHÔNG dùng** `hashPassword`/`verifyPassword` của nó — hai hàm này dùng scrypt (`node:crypto`) và **hỏng trên Cloudflare Workers**: tạo hash được nhưng `verifyPassword` luôn trả `false` → không đăng nhập được. Đã thay bằng `server/utils/password.ts` (Web Crypto PBKDF2-SHA256, 100k vòng, salt 16 byte, format `pbkdf2-sha256$iter$salt$hash`). Mọi chỗ cần băm mật khẩu phải dùng `makePasswordHash` / `verifyPasswordHash`.
 - **Database**: Turso qua `@libsql/client` (`server/utils/db.ts` là nơi DUY NHẤT tạo client).
-- **Lịch nhắc (thay thế worker Go)**: Nitro **tasks** (`server/tasks/reminders/check.ts` — Nitro quét `<scanDirs>/tasks/`, Nuxt đặt scanDirs = `server/` nên `server/tasks/` là chuẩn) + `scheduledTasks` trong `nuxt.config.ts` (PHẢI đặt trong khối `nitro: {}`). Cloudflare tự sinh Cron Triggers. Task gọi chung service với API, đừng viết logic riêng.
+- **🚨 Lịch nhắc: Cloudflare Pages KHÔNG chạy Nitro task.** Nitro vẫn sinh handler `scheduled()`, nhưng **Pages không hỗ trợ Cron Triggers** nên nó không bao giờ được gọi. Hậu quả: reminder đến hạn mà không bao giờ gửi.
+  Cách đang dùng: Worker **`sennote-cron`** (thư mục `cron/`, có `crons = ["* * * * *"]`) gọi `POST https://sennote.pages.dev/api/cron/reminders-check` mỗi phút, bảo vệ bằng header `x-cron-secret` (env `NUXT_CRON_SECRET` trên Pages = `CRON_SECRET` trên Worker).
+  Logic nằm ở `server/utils/run-reminder-check.ts` — dùng chung cho cả Nitro task và endpoint HTTP, **không viết 2 lần**.
+  Triệu chứng nếu cron hỏng: reminder `next_action_at` đã qua nhưng `is_sended_one_time` vẫn 0 và `last_sent_at` null.
   - ⚠️ **Tên task suy ra từ ĐƯỜNG DẪN file** (`/` → `:`), không phải `meta.name`. File `server/tasks/reminders-check.ts` → tên `reminders-check`; muốn tên `reminders:check` (dùng trong `scheduledTasks` và URL) **phải** đặt file ở `server/tasks/reminders/check.ts`.
   - ⚠️ **`preset: 'cloudflare-pages'` chỉ đặt khi build**, không đặt khi dev (xem `nuxt.config.ts`). Đặt trong dev → Nitro dùng `cloudflare-dev` emulation, cần wrangler và `/_nitro/tasks/...` trả 404.
 - **FCM**: gọi trực tiếp **HTTP v1 API** qua `server/utils/fcm.ts` (firebase-admin KHÔNG chạy trên Workers). Cùng 1 hàm cho Android / iOS / **web** — FCM không phân biệt nền tảng, chỉ thêm `webpush.fcmOptions.link` cho web.
@@ -76,6 +79,7 @@ server/tasks  →  server/utils (dùng CHUNG service với api, không code trù
 - **Web Push cần HTTPS**; `localhost` được coi là an toàn. Safari iOS chỉ chạy với PWA đã thêm vào màn hình chính (16.4+).
 - `NUXT_SESSION_PASSWORD` phải ≥ 32 ký tự; thiếu → lỗi khi chạy.
 - **Session là cookie, giới hạn 4 KB** → `setUserSession` chỉ lưu thông tin tối thiểu (id, email...), KHÔNG nhồi dữ liệu lớn vào session.
+- **Mọi cột datetime lưu ISO 8601 UTC bằng `toISOString()`** (`2026-08-30T09:25:00.000Z`). Khi so sánh trong SQL **phải truyền cùng định dạng**. Dùng `datetime('now')` của SQLite (`2026-08-30 09:25:00`) sẽ so sánh SAI: tại vị trí thứ 10, `'T'` > `' '` nên mọi ISO string đều "lớn hơn" → query trả về rỗng. Luôn truyền `new Date().toISOString()` làm tham số.
 - **Workers không có filesystem** → không dùng SQLite local file (`file:...`), không ghi file; mọi thứ qua Turso HTTP.
 - `nuxt generate` KHÔNG dùng được (auth-utils cần server) → chỉ dùng `nuxt build`.
 - Gọi API từ client: dùng `$fetch('/api/...')` (browser tự gửi cookie). Gọi trong `useAsyncData`/SSR phải dùng `useFetch` hoặc `useRequestFetch()` để forward cookie — `$fetch` thường trong `useAsyncData` sẽ KHÔNG mang cookie.

@@ -1,16 +1,20 @@
 /* eslint-disable no-undef */
 // Service Worker cho Firebase Cloud Messaging (Web Push).
-// File nằm trong public/ nên được serve đúng ở gốc: /firebase-messaging-sw.js
+// Nằm trong public/ → được serve ở gốc: /firebase-messaging-sw.js
 //
 // Lưu ý:
-//  - KHÔNG dùng import module ở đây (trình duyệt cũ không hỗ trợ SW module).
+//  - KHÔNG dùng import module (trình duyệt cũ không hỗ trợ SW module).
 //  - Phải là file tĩnh ở gốc domain, không được nằm trong /_nuxt/.
+//  - Cấu hình truyền qua query string khi đăng ký SW (file tĩnh không đọc được
+//    runtimeConfig, và cách này đảm bảo config CÓ SẴN lúc SW khởi động).
+//
+// ⚠️ ĐỪNG thêm listener `push` thủ công. Firebase messaging đã tự đăng ký
+//    listener `push` của nó; thêm listener nữa => CÙNG 1 push bị xử lý 2 lần
+//    => thông báo hiện 2 lần. Chỉ dùng onBackgroundMessage.
 
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js')
 
-// Cấu hình được truyền qua URL khi đăng ký SW (?apiKey=...&...).
-// Cách này tránh phải import config vào file tĩnh.
 const params = new URLSearchParams(self.location.search)
 
 firebase.initializeApp({
@@ -23,21 +27,37 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
-// Thông báo khi tab đang Ở TRANG SAU (background) hoặc tab đã đóng.
-messaging.onBackgroundMessage((payload) => {
-  const notification = payload.notification || {}
-  const title = notification.title || 'SenNote'
+/**
+ * Hiển thị thông báo — DUY NHẤT MỘT NƠI gọi.
+ *
+ * `tag` cố định để nếu vì lý do gì bị gọi 2 lần, thông báo sau THAY THẾ
+ * thông báo trước thay vì xếp chồng thành 2 cái.
+ */
+function showNotification(payload) {
+  const n = (payload && payload.notification) || {}
+  const data = (payload && payload.data) || {}
+  const title = n.title || data.title || 'SenNote'
+
   const options = {
-    body: notification.body || '',
-    icon: notification.icon || '/icon-192.png',
+    body: n.body || data.body || '',
+    icon: n.icon || '/icon-192.png',
     badge: '/icon-192.png',
+    tag: 'sennote',
+    renotify: true,
     data: {
-      ...(payload.data || {}),
-      // link do server gửi qua webpush.fcmOptions.link
-      url: payload.fcmOptions?.link || (payload.data && payload.data.url) || '/',
+      ...data,
+      url: (payload && payload.fcmOptions && payload.fcmOptions.link) || data.url || '/',
     },
   }
-  self.registration.showNotification(title, options)
+
+  return self.registration.showNotification(title, options)
+}
+
+// Tab ĐÓNG / không focus → FCM gọi vào đây.
+// Tab đang mở → FCM gửi thẳng về trang (xem onMessage trong usePush.ts).
+// Hai đường này loại trừ nhau, không bao giờ cùng chạy cho 1 message.
+messaging.onBackgroundMessage((payload) => {
+  return showNotification(payload)
 })
 
 // Bấm vào thông báo → mở đúng trang
@@ -54,3 +74,6 @@ self.addEventListener('notificationclick', (event) => {
     }),
   )
 })
+
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', () => self.clients.claim())

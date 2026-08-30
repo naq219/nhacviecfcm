@@ -17,6 +17,8 @@ export default defineNuxtConfig({
     fcmClientEmail: '',
     fcmPrivateKey: '',
     fcmProjectId: '',
+    /** Secret để Worker cron gọi POST /api/cron/reminders-check */
+    cronSecret: '',
 
     public: {
       // ⚠️ public = GỬI XUỐNG TRÌNH DUYỆT. Chỉ để các giá trị Firebase

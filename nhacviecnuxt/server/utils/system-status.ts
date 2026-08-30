@@ -1,4 +1,5 @@
 import type { SystemStatus } from '#shared/types'
+import { getAccessToken, isFcmConfigured } from './fcm'
 
 /**
  * Kill-switch cho cron — port từ `system_status` của Go.
@@ -37,6 +38,28 @@ export async function disableWorker(errorMessage: string): Promise<void> {
     sql: 'UPDATE system_status SET worker_enabled = 0, last_error = ?, updated_at = ? WHERE mid = 1',
     args: [errorMessage.slice(0, 500), new Date().toISOString()],
   })
+}
+
+/**
+ * Kiểm tra FCM có thực sự dùng được trong runtime hiện tại không.
+ * Quan trọng vì Web Crypto trên Workers có thể khác Node — cần xác minh
+ * tận nơi chứ không chỉ test ở local.
+ */
+export async function checkFcmHealth(): Promise<{
+  configured: boolean
+  accessToken: boolean
+  error?: string
+}> {
+  if (!isFcmConfigured()) {
+    return { configured: false, accessToken: false }
+  }
+  try {
+    const token = await getAccessToken()
+    return { configured: true, accessToken: Boolean(token) }
+  }
+  catch (e) {
+    return { configured: true, accessToken: false, error: String(e).slice(0, 200) }
+  }
 }
 
 /** Bật/tắt worker thủ công (route quản trị) */
